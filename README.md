@@ -16,30 +16,22 @@ uvicorn app.main:app --reload
 
 Open http://localhost:8000 to preview every card.
 
-## Deploy (Vercel — recommended)
+## Publish (GitHub Actions — no public server needed)
 
-1. Push this folder to its own repo, e.g. `alishaaverma/profile-api`.
-2. On vercel.com, click **Add New → Project**, import the repo and keep the defaults (`index.py` is the entrypoint).
-3. Under **Settings → Environment Variables**, add:
-   - `GITHUB_USERNAME` = `alishaaverma`
-   - `GITHUB_TOKEN` = a GitHub token with **no scopes**, created under Settings → Developer settings → Tokens (classic).
-     Without it you get 60 requests/hour, which is not enough.
-4. Point the profile README at the deployment:
-   ```bash
-   ./set_api_url.sh https://<your-project>.vercel.app
-   ```
-   Commit and push `alishaaverma/README.md`.
+`.github/workflows/profile-cards.yml` runs every hour (and on every push to `main`). It runs
+`generate.py`, which renders all cards from live GitHub data. The cards are force-pushed to the
+`output` branch of `alishaaverma/alishaaverma`, and the profile README loads them from
+`https://raw.githubusercontent.com/alishaaverma/alishaaverma/output/<card>.svg`.
 
-Render also works (`render.yaml` is included). On the free plan, though, the service sleeps when idle.
-GitHub's image proxy then times out and the cards show as broken images.
+Setup (once):
+1. Create a **fine-grained** token (GitHub → Settings → Developer settings → Fine-grained tokens) with
+   access to **only** `alishaaverma/alishaaverma` and **Contents: Read and write**.
+2. In this repo, open Settings → Secrets and variables → Actions and add it as `PROFILE_REPO_TOKEN`.
+3. Push, then confirm the **Profile cards** run is green in the Actions tab.
 
-## How "real-time" works
+To run it locally: `python generate.py --out dist`
 
-- Data is fetched live from the GitHub REST/GraphQL APIs and cached in memory for up to 10 minutes.
-- Responses send `Cache-Control: max-age=CACHE_SECONDS` (default 1800s). GitHub's image proxy (camo) refetches after that,
-  so the profile stays within ~30 minutes of live. Lower `CACHE_SECONDS` for fresher cards.
-- Each live card shows a `live · <time IST>` stamp with the render time.
-- Project cards link through `/go/project/{i}`. That redirects to whichever repo is currently in slot *i*.
+The FastAPI server (`app/main.py`, `index.py`) still works for local previews, or for a public deployment.
 
 ## Endpoints
 

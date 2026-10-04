@@ -291,7 +291,7 @@ ENDPOINTS = [("GET", "/api/projects", "Get all projects"), ("GET", "/api/github/
              ("GET", "/api/tech-stack", "Get technologies")]
 
 
-def playground(repos: dict, api_base: str, n: int = 13) -> str:
+def playground(repos: dict, request_url: str, n: int = 13) -> str:
     W, H = 850, 292
     b = frame(W, H) + heading(24, 20, n, "API Playground", "Live response from this profile's own API")
     for i, (m, path, desc) in enumerate(ENDPOINTS):
@@ -307,7 +307,7 @@ def playground(repos: dict, api_base: str, n: int = 13) -> str:
     rx = 290
     b += panel(rx, 66, 536, 30, 7, fill="#0a0e15")
     b += (f'<text x="{rx + 12}" y="85" font-size="10.5" font-weight="800" fill="{GREEN}">GET</text>'
-          f'<text x="{rx + 44}" y="85" font-size="10.5" class="mono">{esc(trunc(api_base.rstrip("/") + "/api/projects", 58))}</text>')
+          f'<text x="{rx + 44}" y="85" font-size="10.5" class="mono">{esc(trunc(request_url, 58))}</text>')
     b += (f'<rect x="{rx + 430}" y="70" width="102" height="22" rx="5" fill="url(#og)" class="glowpulse"/>'
           f'<text x="{rx + 481}" y="85" text-anchor="middle" font-size="10.5" font-weight="800" fill="#1a0d02">Send Request</text>')
     for i, t in enumerate(("Response", "Headers", "cURL")):

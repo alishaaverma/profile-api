@@ -122,7 +122,7 @@ async def card_activity(username: str | None = None, n: int = 11):
 @app.get("/card/playground")
 async def card_playground(request: Request, username: str | None = None, n: int = 13):
     async def f():
-        return live.playground(await gh.get_repos(_user(username)), str(request.base_url), n)
+        return live.playground(await gh.get_repos(_user(username)), str(request.base_url) + "api/projects", n)
     return await _render(f)
 
 

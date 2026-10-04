@@ -1,0 +1,67 @@
+name: Profile cards
+
+# Renders the animated SVG cards from live GitHub data and publishes them to the
+# `output` branch of the profile repo, where README.md loads them from.
+on:
+  schedule:
+    - cron: "0 * * * *" # every hour
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: profile-cards
+  cancel-in-progress: true
+
+env:
+  PROFILE_REPO: alishaaverma/alishaaverma
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Check out profile repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.PROFILE_REPO }}
+          token: ${{ secrets.PROFILE_REPO_TOKEN }}
+          path: profile
+
+      - name: Render cards
+        env:
+          GITHUB_USERNAME: alishaaverma
+          GITHUB_TOKEN: ${{ github.token }} # read-only, public data
+        run: python generate.py --out dist --readme profile/README.md
+
+      - name: Publish cards to the output branch
+        working-directory: dist
+        env:
+          TOKEN: ${{ secrets.PROFILE_REPO_TOKEN }}
+        run: |
+          git init -q -b output
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "Update profile cards"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${PROFILE_REPO}.git" output
+
+      - name: Commit README project links if they changed
+        working-directory: profile
+        run: |
+          if git diff --quiet README.md; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -am "Update featured project links"
+          git push -q
