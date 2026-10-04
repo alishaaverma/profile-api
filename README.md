@@ -19,7 +19,7 @@ Open http://localhost:8000 to preview every card.
 ## Deploy (Vercel — recommended)
 
 1. Push this folder to its own repo, e.g. `alishaaverma/profile-api`.
-2. On vercel.com, click **Add New → Project**, import the repo and keep the defaults (`vercel.json` is included).
+2. On vercel.com, click **Add New → Project**, import the repo and keep the defaults (`index.py` is the entrypoint).
 3. Under **Settings → Environment Variables**, add:
    - `GITHUB_USERNAME` = `alishaaverma`
    - `GITHUB_TOKEN` = a GitHub token with **no scopes**, created under Settings → Developer settings → Tokens (classic).
