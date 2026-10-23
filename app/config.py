@@ -8,11 +8,12 @@ Everything below is your own static content - edit it freely.
 
 import os
 
-GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
+# Keep the defaults: GitHub Actions has no .env file, so without them the render crashes.
+GITHUB_USERNAME = os.getenv("GITHUB_USERNAME") or "alishaaverma"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 # Seconds that GitHub's image proxy / CDN may cache a card. Lower = fresher.
-CACHE_SECONDS = int(os.getenv("CACHE_SECONDS"))
+CACHE_SECONDS = int(os.getenv("CACHE_SECONDS") or "1800")
 
 # PROFILE is now only a fallback: the cards take the role from your GitHub bio, "open to work"
 # from the "Available for hire" checkbox, and the tagline, chips, terminal lines, about text,

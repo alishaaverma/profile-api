@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from .. import config
@@ -15,8 +16,10 @@ P = config.PROFILE
 
 
 def _years(user: dict) -> int:
-    if P.get("years_experience"):
-        return int(P["years_experience"])
+    # accepts 2, "2" or "2 Years"
+    m = re.search(r"\d+", str(P.get("years_experience") or ""))
+    if m:
+        return int(m.group())
     created = datetime.fromisoformat(user["created_at"].replace("Z", "+00:00"))
     return max(1, (datetime.now(timezone.utc) - created).days // 365)
 
