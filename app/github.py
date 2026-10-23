@@ -716,10 +716,10 @@ async def get_weather() -> dict | None:
 async def get_profile_views(login: str, previous: str) -> dict:
     """Profile views from the komarev.com counter that the profile README loads (one hit per view):
     {'views': int | None, 'self_hits': int}. Reading the counter is a hit too, so every read is
-    remembered in `previous` (the views.json published last run) and taken off the count."""
+    remembered in `previous` (API URL of the views.json published last run) and taken off the count."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            r = await client.get(previous)
+            r = await client.get(previous, headers={"Accept": "application/vnd.github.raw"})
             state = r.json() if r.status_code == 200 else {}
         except (httpx.HTTPError, ValueError):
             state = {}

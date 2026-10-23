@@ -48,7 +48,9 @@ async def render(login: str, count_views: bool = False) -> tuple[dict[str, str],
         gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login), gh.get_til(login),
         gh.get_byte_feeds(login), gh.get_ideas(login), gh.get_ama(login), gh.get_socials(login))
     # only the hourly workflow reads the view counter: each read is a hit it has to take off again
-    views = await gh.get_profile_views(login, f"{RAW}/views.json") if count_views else None
+    # read through the API, not raw.githubusercontent.com, which serves a copy up to 5 minutes old
+    views = (await gh.get_profile_views(login, f"{gh.API}/repos/{login}/{login}/contents/views.json?ref=output")
+             if count_views else None)
     set_festival_dates(festivals)
     set_sun_times(weather)
     top = gh.featured(repos["repos"], 4)
