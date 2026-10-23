@@ -268,6 +268,44 @@ async def card_desi_corner(username: str | None = None):
     return await _render(f)
 
 
+@app.get("/card/report-card")
+async def card_report_card(username: str | None = None):
+    async def f():
+        login = _user(username)
+        user, cal = await asyncio.gather(gh.get_user(login), gh.get_calendar(login))
+        return desi.report_card(user, cal)
+    return await _render(f)
+
+
+@app.get("/card/cricket")
+async def card_cricket(username: str | None = None):
+    async def f():
+        login = _user(username)
+        cal, commits = await asyncio.gather(gh.get_calendar(login), gh.get_commit_log(login))
+        return desi.cricket(cal, commits)
+    return await _render(f)
+
+
+@app.get("/card/metro")
+async def card_metro(username: str | None = None):
+    async def f():
+        login = _user(username)
+        repos, tech = await asyncio.gather(gh.get_repos(login), gh.get_tech(login))
+        return desi.metro(repos, tech)
+    return await _render(f)
+
+
+@app.get("/card/dainik-commit")
+async def card_dainik_commit(username: str | None = None):
+    async def f():
+        login = _user(username)
+        user, cal, commits, events, repos, weather = await asyncio.gather(
+            gh.get_user(login), gh.get_calendar(login), gh.get_commit_log(login), gh.get_events(login),
+            gh.get_repos(login), gh.get_weather())
+        return desi.dainik_commit(user, cal, commits, events, repos, weather)
+    return await _render(f)
+
+
 @app.get("/card/rajdhani")
 async def card_rajdhani(username: str | None = None):
     async def f():

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import re
 from pathlib import Path
 
@@ -40,12 +41,14 @@ BUTTONS = {
 RAW = f"https://raw.githubusercontent.com/{config.GITHUB_USERNAME}/{config.GITHUB_USERNAME}/output"
 
 
-async def render(login: str) -> tuple[dict[str, str], list[dict], dict, list[dict]]:
+async def render(login: str, count_views: bool = False) -> tuple[dict[str, str], list[dict], dict, list[dict], dict | None]:
     (user, repos, events, stats, cal, tech, festivals, weather, commits, til, feeds, ideas, ama,
      socials) = await asyncio.gather(
         gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login),
         gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login), gh.get_til(login),
         gh.get_byte_feeds(login), gh.get_ideas(login), gh.get_ama(login), gh.get_socials(login))
+    # only the hourly workflow reads the view counter: each read is a hit it has to take off again
+    views = await gh.get_profile_views(login, f"{RAW}/views.json") if count_views else None
     set_festival_dates(festivals)
     set_sun_times(weather)
     top = gh.featured(repos["repos"], 4)
@@ -54,7 +57,7 @@ async def render(login: str) -> tuple[dict[str, str], list[dict], dict, list[dic
 
     # Section numbers follow the order of the cards in the profile README.
     cards = {
-        "hero": prof.hero(user, ctx),
+        "hero": prof.hero(user, ctx, views["views"] if views else None),
         "tldr": prof.tldr(user, stats, cal, repos, tech, ctx),
         "city": live.contribution_city(user, cal, weather, feeds, repos, building),
         "about": prof.about(user, 2, ctx),
@@ -67,7 +70,11 @@ async def render(login: str) -> tuple[dict[str, str], list[dict], dict, list[dic
         "coding-dna": live.coding_dna(commits, 6),
         "thali": desi.tech_thali(tech, repos),
         "desi-corner": desi.desi_corner(user, cal, commits, repos),
+        "report-card": desi.report_card(user, cal),
         "rajdhani": desi.rajdhani(repos),
+        "metro": desi.metro(repos, tech),
+        "cricket": desi.cricket(cal, commits),
+        "dainik-commit": desi.dainik_commit(user, cal, commits, events, repos, weather),
         "community": live.community(ideas, ama, 7),
         # the rest sits under "Explore more about me" in the profile README
         "tech-stack": prof.tech_stack(tech, 9),
@@ -87,7 +94,7 @@ async def render(login: str) -> tuple[dict[str, str], list[dict], dict, list[dic
         cards[f"project-{i}"] = live.project_card(top[i] if i < len(top) else None, i, login)
     for name, (label, icon, primary) in BUTTONS.items():
         cards[name] = prof.button(label, icon, primary)
-    return cards, top, user, socials
+    return cards, top, user, socials, views
 
 
 def contact_links(login: str, user: dict, socials: list[dict]) -> list[tuple[str, str, str]]:
@@ -138,14 +145,17 @@ async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="dist")
     ap.add_argument("--readme")
+    ap.add_argument("--count-views", action="store_true", help="read the profile view counter (the workflow only)")
     args = ap.parse_args()
 
     login = config.GITHUB_USERNAME
-    cards, top, user, socials = await render(login)
+    cards, top, user, socials, views = await render(login, args.count_views)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     for name, body in cards.items():
         (out / f"{name}.svg").write_text(body)
+    if views:
+        (out / "views.json").write_text(json.dumps(views))
     print(f"Rendered {len(cards)} cards for @{login} into {out}/")
 
     if args.readme:

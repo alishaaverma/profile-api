@@ -1,5 +1,5 @@
-"""Desi cards: Tech Thali, Desi Dev Corner (rashifal, chai-o-meter, commit mood ring) and the
-Rajdhani Express of my repos."""
+"""Desi cards: Tech Thali, Desi Dev Corner (rashifal, chai-o-meter, commit mood ring), the Rajdhani
+Express of my repos, the Report Card, the Commit Premier League, the Delhi Metro map and Dainik Commit."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from .. import config
 from ..github import lang_color
-from .theme import (AMBER, BLUE, BORDER, CYAN, GREEN, ORANGE, WEATHER_CSS, compact, d, dot, esc, frame, heading,
+from .theme import (AMBER, BLUE, BORDER, CYAN, GREEN, ORANGE, TEXT, WEATHER_CSS, compact, d, dot, esc, frame, heading,
                     panel, svg, synced, trunc, wrap)
 
 
@@ -351,3 +351,446 @@ def rajdhani(repos: dict, n: int | None = None) -> str:
           f'{len(repos["repos"])} coaches in the yard</text>')
     b += synced(826, H - 10)
     return svg(W, H, b, TRAIN_CSS + WEATHER_CSS, title="Rajdhani Express")
+
+
+# ------------------------------------------------------------ report card
+
+DAILY_GOAL = 3  # contributions a day that earn full marks for output
+GRADES = [(90, "A+", GREEN), (80, "A", GREEN), (70, "B+", CYAN), (60, "B", BLUE), (50, "C", AMBER), (35, "D", ORANGE),
+          (0, "F", "#ff7b72")]
+REMARKS = {"A+": "Shabash! Class topper 🏆", "A": "Bahut badhiya, keep it up", "B+": "Accha hai, thoda aur push karo",
+           "B": "Theek hai, consistency badhao", "C": "Mehnat ki zaroorat hai", "D": "Parents ko bulao 😅",
+           "F": "Kal se pakka padhai? 📚"}
+
+
+def _grade(score: float) -> tuple[str, str]:
+    return next((g, color) for limit, g, color in GRADES if score >= limit)
+
+
+def _streak(days: list[dict]) -> int:
+    best = run = 0
+    for day in days:
+        run = run + 1 if day["count"] else 0
+        best = max(best, run)
+    return best
+
+
+def _term(days: list[dict], streak_target: int) -> dict:
+    """Marks for one term: attendance (days I coded), output (vs DAILY_GOAL a day) and longest streak."""
+    n = max(len(days), 1)
+    total, active, streak = sum(day["count"] for day in days), sum(1 for day in days if day["count"]), _streak(days)
+    marks = {"attendance": 100 * active / n, "output": min(100.0, 100 * total / n / DAILY_GOAL),
+             "streak": min(100.0, 100 * streak / max(min(streak_target, n), 1))}
+    overall = .4 * marks["attendance"] + .35 * marks["output"] + .25 * marks["streak"]
+    return {"total": total, "active": active, "n": len(days), "streak": streak, "marks": marks, "overall": overall}
+
+
+def report_card(user: dict, calendar: dict, n: int | None = None) -> str:
+    """Weekly, monthly and yearly grades from my contribution calendar, like a school report card."""
+    W, H = 850, 300
+    b = frame(W, H)
+    days = _days(calendar)
+    today = days[-1]["date"] if days else _ist().strftime("%Y-%m-%d")
+    y0, mo = int(today[:4]), int(today[5:7])
+    session = f"{y0}–{(y0 + 1) % 100:02d}" if mo >= 4 else f"{y0 - 1}–{y0 % 100:02d}"
+    b += heading(24, 20, n, "Report Card", f"GitHub Public School, Noida · Session {session} · graded live from my contributions")
+    b += (f'<text x="826" y="34" text-anchor="end" font-size="10" class="muted">Roll no.</text>'
+          f'<text x="826" y="50" text-anchor="end" font-size="12" font-weight="800" class="mono" fill="{AMBER}">'
+          f'@{esc(user["login"])}</text>')
+
+    def short(iso: str) -> str:
+        return datetime.strptime(iso, "%Y-%m-%d").strftime("%d %b").lstrip("0")
+
+    weeks = calendar["weeks"]
+    week, last_week = (weeks[-1] if weeks else []), (weeks[-2] if len(weeks) > 1 else [])
+    month = [day for day in days if day["date"][:7] == today[:7]]
+    prev_key = f"{y0 - (mo == 1)}-{12 if mo == 1 else mo - 1:02d}"
+    # last month up to the same date, so a half-done month isn't compared with a whole one
+    last_month = [day for day in days if day["date"][:7] == prev_key and day["date"][8:] <= today[8:]]
+    year = [day for day in days if day["date"][:4] == today[:4]]
+    by_month = Counter()
+    for day in year:
+        by_month[day["date"][5:7]] += day["count"]
+    best = max(by_month, key=by_month.get) if by_month else ""
+
+    def versus(now: int, then: int, what: str) -> tuple[str, str]:
+        arrow = "▲" if now > then else "▼" if now < then else "="
+        return f"{arrow} {abs(now - then)} vs {what}", GREEN if now >= then else "#ff7b72"
+
+    terms = []
+    if week:
+        t = _term(week, 7)
+        terms.append(("WEEKLY", f"{short(week[0]['date'])} – {short(today)}", t,
+                      versus(t["total"], sum(day["count"] for day in last_week), "last week")))
+    if month:
+        t = _term(month, 14)
+        prev = datetime.strptime(prev_key, "%Y-%m").strftime("%b")
+        terms.append(("MONTHLY", f"{datetime.strptime(today, '%Y-%m-%d'):%B %Y}", t,
+                      versus(t["total"], sum(day["count"] for day in last_month), f"{prev} (same days)")))
+    if year:
+        t = _term(year, 30)
+        top = (f"Best month: {datetime.strptime(best, '%m'):%b} · {by_month[best]}" if by_month[best] else "No contributions yet",
+               AMBER)
+        terms.append(("YEARLY", f"1 Jan – {short(today)} {today[:4]}", t, top))
+
+    for i, (title, span, t, (note, note_color)) in enumerate(terms):
+        x, y, w, h = 24 + i * 274, 66, 254, 200
+        grade, color = _grade(t["overall"])
+        b += f'<g class="rise" {d(.3 + i * .12)}>' + panel(x, y, w, h, 10)
+        b += (f'<text x="{x + 16}" y="{y + 24}" font-size="12.5" font-weight="800" letter-spacing="1.5" fill="{AMBER}">{title}</text>'
+              f'<text x="{x + 16}" y="{y + 40}" font-size="9.5" class="muted">{esc(span)}</text>')
+        # the teacher's rubber stamp
+        sx, sy = x + w - 36, y + 34
+        b += (f'<g class="pop" {d(1 + i * .2)}><g transform="rotate(-12 {sx} {sy})">'
+              f'<circle cx="{sx}" cy="{sy}" r="23" fill="{color}" fill-opacity=".1" stroke="{color}" stroke-width="2"/>'
+              f'<circle cx="{sx}" cy="{sy}" r="18.5" stroke="{color}" stroke-opacity=".5" stroke-dasharray="2 2"/>'
+              f'<text x="{sx}" y="{sy + 7.5}" text-anchor="middle" font-size="21" font-weight="900" fill="{color}" '
+              f'filter="url(#glow)">{grade}</text></g></g>')
+        rows = [("Attendance", f'{t["active"]}/{t["n"]} days', t["marks"]["attendance"]),
+                ("Contributions", f'{t["total"]} · {t["total"] / max(t["n"], 1):.1f}/day', t["marks"]["output"]),
+                ("Longest streak", f'{t["streak"]} day{"s" if t["streak"] != 1 else ""}', t["marks"]["streak"])]
+        for k, (subject, value, score) in enumerate(rows):
+            ry = y + 74 + k * 30
+            g, gc = _grade(score)
+            b += (f'<text x="{x + 16}" y="{ry}" font-size="10.5" font-weight="600" fill="#c9d1d9">{subject}</text>'
+                  f'<text x="{x + w - 44}" y="{ry}" text-anchor="end" font-size="9.5" class="muted mono">{esc(value)}</text>'
+                  f'<text x="{x + w - 16}" y="{ry}" text-anchor="end" font-size="11" font-weight="800" fill="{gc}">{g}</text>'
+                  f'<rect x="{x + 16}" y="{ry + 7}" width="{w - 32}" height="4" rx="2" fill="#1d2633"/>'
+                  f'<rect x="{x + 16}" y="{ry + 7}" width="{(w - 32) * score / 100:.1f}" height="4" rx="2" fill="{gc}" '
+                  f'class="grow" {d(1.2 + i * .2 + k * .1)}/>')
+        b += (f'<line x1="{x + 16}" y1="{y + 158}" x2="{x + w - 16}" y2="{y + 158}" stroke="{BORDER}" stroke-dasharray="3 3"/>'
+              f'<text x="{x + 16}" y="{y + 174}" font-size="10" font-weight="700" fill="{note_color}">{esc(note)}</text>'
+              f'<text x="{x + 16}" y="{y + 190}" font-size="10" font-style="italic" fill="#c9d1d9">'
+              f'“{esc(REMARKS[grade])}”</text></g>')
+
+    b += (f'<text x="24" y="{H - 12}" font-size="9.5" class="dim mono fade" {d(2)}>Class teacher: Octocat Ma\'am ✍ · '
+          f'attendance 40% · output 35% (goal {DAILY_GOAL}/day) · streak 25%</text>')
+    b += synced(826, H - 12)
+    return svg(W, H, b, title="Report Card")
+
+
+# ------------------------------------------------------- cricket scorecard
+
+DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+
+def _shot(runs: int) -> tuple[str, str]:
+    """(label, colour) for an over: a day without code is a wicket."""
+    if runs == 0:
+        return "W", "#ff5e5e"
+    if runs >= 6:
+        return str(runs), GREEN
+    if runs >= 4:
+        return str(runs), BLUE
+    return str(runs), "#c9d1d9"
+
+
+def cricket(calendar: dict, commits: list[dict], n: int | None = None) -> str:
+    """This week as a 7-over chase: each day is an over, contributions are runs, a day off is a wicket,
+    and last week's total is the target."""
+    W, H = 850, 270
+    b = frame(W, H)
+    b += heading(24, 20, n, "Commit Premier League", "This week chases last week · one over a day, contributions are runs")
+    weeks = calendar["weeks"]
+    week, last = (weeks[-1] if weeks else []), (weeks[-2] if len(weeks) > 1 else [])
+    runs = [day["count"] for day in week]
+    total, overs, wickets = sum(runs), len(runs), sum(1 for r in runs if r == 0)
+    target = sum(day["count"] for day in last) + 1
+    last_w = sum(1 for day in last if day["count"] == 0)
+
+    # TV scoreboard
+    x, y, w, h = 24, 66, 520, 180
+    b += f'<g class="rise" {d(.2)}>' + panel(x, y, w, h, 10, fill="#0a0f18")
+    b += (f'<rect x="{x}" y="{y}" width="132" height="26" rx="10" fill="url(#og)"/>'
+          f'<rect x="{x + 100}" y="{y}" width="32" height="26" fill="url(#og)"/>'
+          f'<text x="{x + 14}" y="{y + 17.5}" font-size="11" font-weight="900" fill="#1a0d02" letter-spacing="1">THIS WEEK XI</text>'
+          f'<text x="{x + w - 14}" y="{y + 18}" text-anchor="end" font-size="10" class="muted">'
+          f'Target <tspan fill="{AMBER}" font-weight="800">{target}</tspan> · Last week {target - 1}/{last_w} (7 ov)</text>')
+    b += (f'<text x="{x + 16}" y="{y + 70}" font-size="40" font-weight="900" fill="{TEXT}" filter="url(#glow)">'
+          f'{total}/{wickets}</text>'
+          f'<text x="{x + 30 + len(f"{total}/{wickets}") * 23}" y="{y + 70}" font-size="13" class="muted">({overs} ov)</text>')
+    crr = total / max(overs, 1)
+    left = 7 - overs
+    if total >= target:
+        status, color = (f"Target chased with {left} over{'s' if left != 1 else ''} to spare! 🏆" if left else
+                         f"Won by {total - target + 1} runs! 🏆"), GREEN
+    elif left == 0:
+        status, color = f"Lost by {target - 1 - total} runs · next week, revenge 💪", "#ff7b72"
+    else:
+        need = target - total
+        status, color = f"Need {need} run{'s' if need != 1 else ''} from {left} over{'s' if left != 1 else ''} · RRR {need / left:.1f}", AMBER
+    b += (f'<text x="{x + w - 16}" y="{y + 52}" text-anchor="end" font-size="10" class="muted">CRR</text>'
+          f'<text x="{x + w - 16}" y="{y + 70}" text-anchor="end" font-size="18" font-weight="800" fill="{CYAN}">{crr:.1f}</text>'
+          f'<text x="{x + 16}" y="{y + 96}" font-size="11.5" font-weight="700" fill="{color}">{esc(status)}</text>')
+    # over by over
+    for i in range(7):
+        cx, cy = x + 40 + i * 70, y + 136
+        if i < overs:
+            label, c = _shot(runs[i])
+            b += (f'<g class="pop" {d(.6 + i * .12)}><circle cx="{cx}" cy="{cy}" r="17" fill="{c}" fill-opacity=".14" stroke="{c}"/>'
+                  f'<text x="{cx}" y="{cy + 5}" text-anchor="middle" font-size="14" font-weight="900" fill="{c}">{label}</text></g>')
+        else:
+            b += f'<circle cx="{cx}" cy="{cy}" r="17" stroke="{BORDER}" stroke-dasharray="3 3"/>'
+        b += (f'<text x="{cx}" y="{cy + 32}" text-anchor="middle" font-size="9" '
+              f'class="{"muted" if i < overs else "dim"}">{DAYS[i]}</text>')
+    b += "</g>"
+
+    # the ground: a ball bowled down the pitch, again and again
+    gx, gy = 556, 66
+    b += f'<g class="rise" {d(.35)}>' + panel(gx, gy, 270, 92, 10, fill="#0b1a10", stroke="#1f4d2b")
+    b += (f'<ellipse cx="{gx + 135}" cy="{gy + 46}" rx="118" ry="38" fill="#14532d" stroke="#ffffff" stroke-opacity=".35" '
+          f'stroke-dasharray="4 4"/><rect x="{gx + 95}" y="{gy + 38}" width="80" height="16" rx="2" fill="#c8a96a"/>'
+          + "".join(f'<rect x="{gx + sx}" y="{gy + 38}" width="1.6" height="16" fill="#ffffff"/>' for sx in (99, 101.5, 104, 166, 168.5, 171))
+          + f'<circle cx="{gx + 170}" cy="{gy + 46}" r="3" fill="#ff3b30" class="bowl"/></g>')
+    # match facts
+    day_runs = [(r, i) for i, r in enumerate(runs)]
+    best = max(day_runs) if day_runs else (0, 0)
+    start = week[0]["date"] if week else ""
+    mom = Counter(c["repo"] for c in commits if c["date"][:10] >= start).most_common(1)
+    partner = run_ = 0
+    for r in runs:
+        run_ = run_ + 1 if r else 0
+        partner = max(partner, run_)
+    facts = [("Player of the Match", f"{trunc(mom[0][0], 20)} · {mom[0][1]}" if mom else "—", AMBER),
+             ("Best over", f"{DAYS[best[1]]} · {best[0]} runs" if best[0] else "—", GREEN),
+             ("Top partnership", f"{partner} day{'s' if partner != 1 else ''} in a row", CYAN)]
+    for i, (k, v, c) in enumerate(facts):
+        yy = gy + 112 + i * 22
+        b += (f'<g class="fade" {d(.9 + i * .15)}><text x="{gx + 4}" y="{yy}" font-size="10" class="muted">{k}</text>'
+              f'<text x="{gx + 270}" y="{yy}" text-anchor="end" font-size="10.5" font-weight="700" fill="{c}">{esc(v)}</text></g>')
+    # commentary
+    if best[0] >= 10:
+        line = f"Kya shot hai! {DAYS[best[1]]} ko {best[0]} runs ka toofani over 🔥"
+    elif wickets >= 3:
+        line = f"{wickets} wicket gir chuke hain, coach worried hai 😬"
+    elif total >= target:
+        line = "Crowd on its feet, chase complete! 🎉"
+    else:
+        line = "Steady batting, singles le rahe hain 🏏"
+    b += (f'<text x="24" y="{H - 10}" font-size="9.5" class="dim mono fade" {d(2)}>🎙 {esc(line)}</text>'
+          + synced(826, H - 10))
+    css = ("@keyframes bowl{0%{transform:translateX(0);opacity:0}10%{opacity:1}70%{transform:translateX(-64px);opacity:1}"
+           "100%{transform:translateX(-64px);opacity:0}}.bowl{animation:bowl 2.4s ease-in infinite}")
+    return svg(W, H, b, css, title="Commit Premier League")
+
+
+# --------------------------------------------------------- delhi metro map
+
+# Delhi Metro line colours, given to my languages by how many repos use each
+METRO_LINES = [("Blue", "#1e66c9"), ("Yellow", "#f5c400"), ("Magenta", "#c2187b"), ("Red", "#e2231a")]
+GREY_LINE = ("Grey", "#9aa3ad")
+
+
+def _route(x1, y1, x2, y2) -> str:
+    """Metro-map segment: straight, a 45° bend in the middle, straight again."""
+    dy = y2 - y1
+    if not dy:
+        return f" L{x2:.1f},{y2:.1f}"
+    flat = max(0.0, (x2 - x1 - abs(dy)) / 2)
+    return f" L{x1 + flat:.1f},{y1:.1f} L{x2 - flat:.1f},{y2:.1f} L{x2:.1f},{y2:.1f}"
+
+
+def metro(repos: dict, tech: dict, n: int | None = None) -> str:
+    """My repos as a Delhi Metro map: one line per language, stations in the order I created them,
+    every line starting from home in Noida. A repo that uses another line's language is an interchange."""
+    W, H = 850, 380
+    b = frame(W, H)
+    b += heading(24, 20, n, "Delhi Metro: Repo Lines", "One line per language, a station for every repo in the order I made them")
+    rs = sorted(repos["repos"], key=lambda r: r["created_at"] or "")
+    if not rs:
+        return svg(W, H, b, title="Delhi Metro")
+    langs = [lang for lang, _ in repos["languages"]][:len(METRO_LINES)]
+    lines = [(lang, *METRO_LINES[i]) for i, lang in enumerate(langs)]
+    if any(r["language"] not in langs for r in rs):
+        lines.append(("Other", *GREY_LINE))
+    names = [lang for lang, _, _ in lines]
+    home = lambda r: r["language"] if r["language"] in langs else "Other"
+    ys = {lang: 134 + i * (150 / max(len(lines) - 1, 1)) for i, lang in enumerate(names)}
+    x0, x1 = 150, 800
+    step = (x1 - x0) / max(len(rs) - 1, 1)
+    pos = {r["name"]: (x0 + i * step, ys[home(r)]) for i, r in enumerate(rs)}
+    hub = (46, 209)
+    tokens = tech.get("repos", {})
+
+    stops, paths = {}, {}
+    for lang, _, color in lines:
+        own = [r for r in rs if home(r) == lang]
+        extra = [r for r in rs if home(r) != lang and lang != "Other" and lang.lower() in tokens.get(r["name"], set())]
+        stops[lang] = sorted(own + extra, key=lambda r: r["created_at"] or "")
+        y = ys[lang]
+        p = f"M{hub[0]},{hub[1]} L{hub[0] + abs(y - hub[1]) + 30:.1f},{y:.1f}" if stops[lang] else ""
+        px, py = hub[0] + abs(y - hub[1]) + 30, y
+        for r in stops[lang]:
+            sx, sy = pos[r["name"]]
+            p += _route(px, py, sx, sy)
+            px, py = sx, sy
+        paths[lang] = p
+    interchange = {r["name"] for r in rs if sum(r in stops[lang] for lang in names) > 1}
+
+    for i, (lang, line, color) in enumerate(lines):
+        if paths[lang]:
+            b += (f'<path d="{paths[lang]}" stroke="{color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" '
+                  f'class="draw" style="animation-delay:{.2 + i * .15:.2f}s"/>')
+    # the newest line gets a train running on it
+    newest = rs[-1]
+    nl = home(newest)
+    b += (f'<g><rect x="-9" y="-4" width="18" height="8" rx="3" fill="#ffffff" stroke="#0d1117"/>'
+          f'<animateMotion dur="9s" repeatCount="indefinite" rotate="auto" path="{paths[nl]}"/></g>')
+    for i, r in enumerate(rs):
+        sx, sy = pos[r["name"]]
+        color = next(c for lang, _, c in lines if lang == home(r))
+        big = r["name"] in interchange
+        ring = (f'<circle cx="{sx:.1f}" cy="{sy:.1f}" r="7" fill="#ffffff" stroke="#0d1117" stroke-width="2.5"/>' if big else
+                f'<circle cx="{sx:.1f}" cy="{sy:.1f}" r="4.5" fill="#ffffff" stroke="{color}" stroke-width="2.5"/>')
+        if r is newest:
+            ring += f'<circle cx="{sx:.1f}" cy="{sy:.1f}" r="9" stroke="{AMBER}" stroke-width="1.5" class="pulse"/>'
+        b += (f'<g class="pop" {d(.8 + i * .05)}><title>{esc(r["name"])} · {esc(r["language"] or "no main language")}'
+              f' · opened {esc((r["created_at"] or "")[:10])}</title>{ring}'
+              f'<text x="{sx + 5:.1f}" y="{sy - 9:.1f}" transform="rotate(-35 {sx + 5:.1f} {sy - 9:.1f})" font-size="8" '
+              f'font-weight="600" fill="#c9d1d9" stroke="#0d121b" stroke-width="3" paint-order="stroke">'
+              f'{esc(trunc(r["name"], 16))}</text></g>')
+    b += (f'<circle cx="{hub[0]}" cy="{hub[1]}" r="11" fill="#ffffff" stroke="#0d1117" stroke-width="3"/>'
+          f'<text x="{hub[0]}" y="{hub[1] + 4}" text-anchor="middle" font-size="10">🏠</text>'
+          f'<text x="{hub[0]}" y="{hub[1] + 26}" text-anchor="middle" font-size="8.5" font-weight="700" fill="{AMBER}">Noida</text>'
+          f'<text x="{hub[0]}" y="{hub[1] + 36}" text-anchor="middle" font-size="7.5" class="muted">Sec 46</text>')
+
+    # legend + platform display board
+    x = 24
+    for lang, line, color in lines:
+        label = f"{line} · {'Other languages' if lang == 'Other' else lang} · {len(stops[lang])}"
+        b += (f'<rect x="{x}" y="324" width="16" height="6" rx="3" fill="{color}"/>'
+              f'<text x="{x + 22}" y="330" font-size="9.5" fill="#c9d1d9">{esc(label)}</text>')
+        x += len(label) * 5.4 + 40
+    board = f"Agla station: {newest['name']} · Darwaze baayi taraf khulenge"
+    b += (f'<rect x="24" y="342" width="560" height="22" rx="4" fill="#000000" stroke="#2b3646"/>'
+          f'<g clip-path="url(#board)"><text x="590" y="357" font-size="11" font-weight="700" class="mono marquee" '
+          f'fill="#ff9f1c">🚇 {esc(board)}</text></g>')
+    b += synced(826, 357)
+    css = ("@keyframes draw{to{stroke-dashoffset:0}}.draw{stroke-dasharray:2400;stroke-dashoffset:2400;"
+           "animation:draw 2.4s ease forwards}"
+           "@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-1250px)}}"
+           ".marquee{animation:marquee 20s linear infinite}")
+    defs = '<clipPath id="board"><rect x="28" y="342" width="552" height="22"/></clipPath>'
+    return svg(W, H, b, css, defs, title="Delhi Metro: Repo Lines")
+
+
+# ----------------------------------------------------------- dainik commit
+
+PAPER, INK, RULE, PRESS_RED = "#f4ecd8", "#1d1a16", "#8a7f6a", "#a3221a"
+SERIF = "Georgia, 'Times New Roman', serif"
+CARTOONS = ["Works on my machine!", "Bas ek last commit…", "Chai pilao, bug bhagao", "git push --force? Na beta na",
+            "Merge conflict ne din bana diya", "Prod mein test karna mana hai", "Semicolon kahan gaya?!"]
+
+
+def dainik_commit(user: dict, calendar: dict, commits: list[dict], events: list[dict], repos: dict,
+                  weather: dict | None, n: int | None = None) -> str:
+    """Today's front page of 'Dainik Commit', the newspaper of my GitHub, written from the live data."""
+    W, H = 850, 370
+    now = _ist()
+    days = _days(calendar)
+    today, yday = (days[-1]["count"] if days else 0), (days[-2]["count"] if len(days) > 1 else 0)
+    week = sum(day["count"] for day in (calendar["weeks"][-1] if calendar["weeks"] else []))
+    first = (user.get("name") or user["login"]).split()[0]
+    rs = repos["repos"]
+    newest = max(rs, key=lambda r: r["created_at"] or "") if rs else None
+    fresh = newest and (datetime.now(timezone.utc) - datetime.fromisoformat(newest["created_at"].replace("Z", "+00:00"))).days < 3
+    latest = commits[0] if commits else None
+
+    if fresh:
+        head = f"Nayi repo '{newest['name']}' launch! Tech jagat mein halchal"
+    elif today >= 10:
+        head = f"{first} ka dhamaka: aaj {today} contributions!"
+    elif today and latest:
+        head = f"{latest['repo']} pe kaam zor-shor se jaari, aaj {today} contributions"
+    elif yday:
+        head = f"Kal {yday} contributions ke baad aaj abhi tak shanti"
+    else:
+        head = "Coding mein chhutti! Sootron ke mutabik chai break lamba chala"
+    sub = f"Is hafte {week} contributions · saal bhar mein {calendar['total']} · {len(rs)} repos"
+
+    b = (f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="10" fill="{PAPER}" stroke="{RULE}"/>'
+         f'<rect x="1" y="1" width="{W - 2}" height="{H - 2}" rx="10" fill="url(#paper)" opacity=".5"/>')
+    # masthead
+    b += (f'<text x="{W / 2}" y="50" text-anchor="middle" font-size="38" font-weight="900" fill="{INK}" '
+          f'font-family="\'Noto Serif Devanagari\', Mangal, {SERIF}" class="fade">दैनिक कमिट</text>'
+          f'<rect x="24" y="16" width="128" height="40" fill="none" stroke="{INK}"/>'
+          f'<text x="88" y="32" text-anchor="middle" font-size="9" font-weight="700" fill="{INK}" font-family="{SERIF}">NOIDA EDITION</text>'
+          f'<text x="88" y="47" text-anchor="middle" font-size="8.5" fill="{INK}" font-family="{SERIF}">GitHub ka apna akhbaar</text>')
+    w_ = weather or {}
+    wx = f"{w_['temp']}°C, {w_['words']}" if w_ else "Mausam vibhag offline"
+    aqi = f"AQI {w_['aqi']}" if w_.get("aqi") is not None else ""
+    b += (f'<rect x="698" y="16" width="128" height="40" fill="none" stroke="{INK}"/>'
+          f'<text x="762" y="32" text-anchor="middle" font-size="9" font-weight="700" fill="{INK}" font-family="{SERIF}">MAUSAM</text>'
+          f'<text x="762" y="47" text-anchor="middle" font-size="8.5" fill="{INK}" font-family="{SERIF}">'
+          f'{esc(wx)}{" · " + aqi if aqi else ""}</text>')
+    joined = datetime.fromisoformat(user["created_at"].replace("Z", "+00:00"))
+    vol = (datetime.now(timezone.utc) - joined).days
+    b += (f'<line x1="24" y1="66" x2="826" y2="66" stroke="{INK}" stroke-width="2"/>'
+          f'<line x1="24" y1="70" x2="826" y2="70" stroke="{INK}" stroke-width=".6"/>'
+          f'<text x="{W / 2}" y="82" text-anchor="middle" font-size="9" fill="{INK}" font-family="{SERIF}" letter-spacing=".5">'
+          f'Ank {vol} · {now:%A, %d %B %Y} · Keemat: 1 commit ☕</text>'
+          f'<line x1="24" y1="89" x2="826" y2="89" stroke="{INK}" stroke-width=".6"/>')
+    # headline
+    for i, line in enumerate(wrap(head, 58, 2)):
+        b += (f'<text x="{W / 2}" y="{120 + i * 28}" text-anchor="middle" font-size="25" font-weight="900" fill="{INK}" '
+              f'font-family="{SERIF}" class="rise" {d(.2 + i * .1)}>{esc(line)}</text>')
+    hy = 120 + (len(wrap(head, 58, 2)) - 1) * 28
+    b += (f'<text x="{W / 2}" y="{hy + 22}" text-anchor="middle" font-size="12" font-style="italic" fill="{PRESS_RED}" '
+          f'font-family="{SERIF}" class="fade" {d(.5)}>{esc(sub)}</text>')
+    top = hy + 38
+    b += f'<line x1="24" y1="{top}" x2="826" y2="{top}" stroke="{INK}" stroke-width=".6"/>'
+
+    # column 1: the lead story
+    story = (f"NOIDA, {now:%d %B}: Sootron ke mutabik {first} ne aaj {today} aur kal {yday} contributions kiye. "
+             + (f"Sabse taaza commit \"{latest['message']}\" {latest['repo']} repo mein darj hua. " if latest else "")
+             + (f"Taaza repo '{newest['name']}' ({newest['language'] or 'multi-lang'}) ne bhi dhyan kheencha. " if newest else "")
+             + f"Is hafte ka score {week} tak pahunch gaya hai, aur jaankaar kehte hain ki silsila jaari rahega.")
+    b += (f'<text x="24" y="{top + 18}" font-size="11" font-weight="800" fill="{PRESS_RED}" font-family="{SERIF}" '
+          f'letter-spacing="1">MUKHYA SAMACHAR</text>')
+    for i, line in enumerate(wrap(story, 54, 9)):
+        b += (f'<text x="24" y="{top + 36 + i * 14}" font-size="10.5" fill="{INK}" font-family="{SERIF}" class="fade" '
+              f'{d(.6 + i * .05)}>{esc(line)}</text>')
+    b += f'<line x1="330" y1="{top + 8}" x2="330" y2="{H - 30}" stroke="{RULE}" stroke-width=".8"/>'
+
+    # column 2: latest events
+    b += (f'<text x="346" y="{top + 18}" font-size="11" font-weight="800" fill="{PRESS_RED}" font-family="{SERIF}" '
+          f'letter-spacing="1">TAAZA KHABREIN</text>')
+    for i, e in enumerate(events[:5]):
+        when = datetime.fromisoformat(e["at"].replace("Z", "+00:00")) + timedelta(hours=5, minutes=30)
+        b += (f'<g class="fade" {d(.8 + i * .1)}><text x="346" y="{top + 38 + i * 30}" font-size="10.5" font-weight="700" '
+              f'fill="{INK}" font-family="{SERIF}">■ {esc(trunc(e["text"], 40))}</text>'
+              f'<text x="356" y="{top + 51 + i * 30}" font-size="9" font-style="italic" fill="{RULE}" font-family="{SERIF}">'
+              f'{when:%d %b, %I:%M %p}</text></g>')
+    b += f'<line x1="600" y1="{top + 8}" x2="600" y2="{H - 30}" stroke="{RULE}" stroke-width=".8"/>'
+
+    # column 3: share bazaar + cartoon
+    stars = sum(r["stars"] for r in rs)
+    b += (f'<text x="616" y="{top + 18}" font-size="11" font-weight="800" fill="{PRESS_RED}" font-family="{SERIF}" '
+          f'letter-spacing="1">SHARE BAZAAR</text>')
+    for i, (k, v) in enumerate((("Stars ★", stars), ("Followers", user["followers"]), ("Repos", len(rs)))):
+        yy = top + 36 + i * 15
+        b += (f'<text x="616" y="{yy}" font-size="10" fill="{INK}" font-family="{SERIF}">{k}</text>'
+              f'<text x="826" y="{yy}" text-anchor="end" font-size="10" font-weight="700" fill="#1f7a3a" font-family="{SERIF}">'
+              f'{compact(v)}</text>')
+    seed = int(hashlib.md5(f"{now:%Y-%m-%d}".encode()).hexdigest(), 16)
+    joke = CARTOONS[seed % len(CARTOONS)]
+    cx, cy = 650, top + 112
+    b += (f'<rect x="616" y="{top + 82}" width="210" height="{H - 32 - top - 82}" fill="none" stroke="{INK}" stroke-width=".8"/>'
+          f'<text x="622" y="{top + 94}" font-size="8" font-style="italic" fill="{RULE}" font-family="{SERIF}">Aaj ka cartoon</text>'
+          # a stick-figure coder at a laptop
+          f'<g stroke="{INK}" stroke-width="1.6" stroke-linecap="round" fill="none">'
+          f'<circle cx="{cx}" cy="{cy}" r="7"/><path d="M{cx},{cy + 7} v18 M{cx},{cy + 12} l12,6 M{cx},{cy + 25} l-6,12 '
+          f'M{cx},{cy + 25} l6,12"/></g>'
+          f'<path d="M{cx + 10},{cy + 22} h18 l-4,-12 h-14 z" fill="{INK}"/>'
+          f'<text x="{cx + 2}" y="{cy - 12}" font-size="9">☕</text>'
+          f'<path d="M{cx + 30},{cy - 14} h134 a6,6 0 0 1 6,6 v18 a6,6 0 0 1 -6,6 h-124 l-10,8 v-8 a6,6 0 0 1 -6,-6 v-18 '
+          f'a6,6 0 0 1 6,-6 z" fill="#ffffff" stroke="{INK}"/>'
+          f'<text x="{cx + 100}" y="{cy + 1}" text-anchor="middle" font-size="8.5" font-style="italic" fill="{INK}" '
+          f'font-family="{SERIF}">{esc(joke)}</text>')
+
+    b += (f'<line x1="24" y1="{H - 26}" x2="826" y2="{H - 26}" stroke="{INK}" stroke-width=".6"/>'
+          f'<text x="24" y="{H - 11}" font-size="8.5" font-style="italic" fill="{RULE}" font-family="{SERIF}">'
+          f'Har ghante naya edition · chhapa {now:%d %b %Y, %H:%M} IST · sampadak: @{esc(user["login"])}</text>')
+    defs = ('<pattern id="paper" width="6" height="6" patternUnits="userSpaceOnUse">'
+            f'<circle cx="1" cy="1" r=".5" fill="{RULE}" fill-opacity=".25"/></pattern>')
+    return svg(W, H, b, defs=defs, title="Dainik Commit", light=False)

@@ -110,7 +110,8 @@ def _terminal_lines(c: dict) -> list[str]:
 
 # ---------------------------------------------------------------- hero
 
-def hero(user: dict, ctx: dict | None = None) -> str:
+def hero(user: dict, ctx: dict | None = None, views: int | None = None) -> str:
+    """views: profile views so far (github.get_profile_views); the pill is left out when unknown."""
     c = _ctx(user, ctx)
     W, H = 850, 330
     phase, fest = sky_phase(), festival_today()
@@ -206,6 +207,15 @@ def hero(user: dict, ctx: dict | None = None) -> str:
     stats = (f"{user['public_repos']} repos  ·  {compact(user['followers'])} followers  ·  "
              f"{compact(user['following'])} following")
     b += f'<text x="{nx + nw / 2}" y="256" text-anchor="middle" font-size="11" class="mono ink fade" fill="#c9d1d9" {d(1.3)}>{esc(stats)}</text>'
+    if views is not None:
+        label = f"Profile viewed {views:,} times"
+        pw = len(label) * 6.4 + 46
+        px = nx + (nw - pw) / 2
+        b += (f'<g class="pop" {d(1.5)}><title>Counted live from every visit to this profile</title>'
+              f'<rect x="{px:.0f}" y="268" width="{pw:.0f}" height="24" rx="12" fill="#120b06" stroke="{AMBER}" stroke-opacity=".6"/>'
+              f'<text x="{px + 14:.0f}" y="284.5" font-size="12">👀</text>'
+              f'<text x="{px + 34:.0f}" y="284" font-size="11" font-weight="700" fill="{AMBER}">{esc(label)}</text>'
+              + dot(px + pw - 12, 280, 3, GREEN) + '</g>')
 
     css = ("@keyframes neon{0%,100%{opacity:.3}8%,22%{opacity:1}34%{opacity:.3}}.neon{opacity:.3;animation:neon 4.5s ease-in-out infinite}"
            + FESTIVAL_CSS)

@@ -45,7 +45,7 @@ jobs:
         env:
           GITHUB_USERNAME: alishaaverma
           GITHUB_TOKEN: ${{ github.token }} # read-only, public data
-        run: python generate.py --out dist --readme profile/README.md
+        run: python generate.py --out dist --readme profile/README.md --count-views
 
       - name: Publish cards to the output branch
         working-directory: dist

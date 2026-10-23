@@ -713,6 +713,28 @@ async def get_weather() -> dict | None:
     return await _cached("weather", load)
 
 
+async def get_profile_views(login: str, previous: str) -> dict:
+    """Profile views from the komarev.com counter that the profile README loads (one hit per view):
+    {'views': int | None, 'self_hits': int}. Reading the counter is a hit too, so every read is
+    remembered in `previous` (the views.json published last run) and taken off the count."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            r = await client.get(previous)
+            state = r.json() if r.status_code == 200 else {}
+        except (httpx.HTTPError, ValueError):
+            state = {}
+        hits = int(state.get("self_hits", 0))
+        try:
+            r = await client.get("https://komarev.com/ghpvc/", params={"username": login, "abbreviated": "false"})
+            counts = re.findall(r">([\d,]+)</text>", r.text) if r.status_code == 200 else []
+        except httpx.HTTPError:
+            counts = []
+    if not counts:
+        return {"views": state.get("views"), "self_hits": hits}
+    hits += 1
+    return {"views": max(int(counts[-1].replace(",", "")) - hits, state.get("views") or 0), "self_hits": hits}
+
+
 # ------------------------------------------------------------------ helpers
 
 def time_ago(iso: str | None) -> str:
