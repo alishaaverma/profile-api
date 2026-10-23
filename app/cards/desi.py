@@ -676,7 +676,8 @@ def metro(repos: dict, tech: dict, n: int | None = None) -> str:
 
 # ----------------------------------------------------------- dainik commit
 
-PAPER, INK, RULE, PRESS_RED = "#f4ecd8", "#1d1a16", "#8a7f6a", "#a3221a"
+# dark newsprint, so the card sits with the other dark cards
+PAPER, INK, RULE, PRESS_RED = "#17140f", "#ece3cc", "#8f846d", "#e0584b"
 SERIF = "Georgia, 'Times New Roman', serif"
 CARTOONS = ["Works on my machine!", "Bas ek last commit…", "Chai pilao, bug bhagao", "git push --force? Na beta na",
             "Merge conflict ne din bana diya", "Prod mein test karna mana hai", "Semicolon kahan gaya?!"]
@@ -784,7 +785,7 @@ def dainik_commit(user: dict, calendar: dict, commits: list[dict], events: list[
           f'<path d="M{cx + 10},{cy + 22} h18 l-4,-12 h-14 z" fill="{INK}"/>'
           f'<text x="{cx + 2}" y="{cy - 12}" font-size="9">☕</text>'
           f'<path d="M{cx + 30},{cy - 14} h134 a6,6 0 0 1 6,6 v18 a6,6 0 0 1 -6,6 h-124 l-10,8 v-8 a6,6 0 0 1 -6,-6 v-18 '
-          f'a6,6 0 0 1 6,-6 z" fill="#ffffff" stroke="{INK}"/>'
+          f'a6,6 0 0 1 6,-6 z" fill="#262119" stroke="{INK}"/>'
           f'<text x="{cx + 100}" y="{cy + 1}" text-anchor="middle" font-size="8.5" font-style="italic" fill="{INK}" '
           f'font-family="{SERIF}">{esc(joke)}</text>')
 
