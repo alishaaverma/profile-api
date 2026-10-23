@@ -133,9 +133,10 @@ def hero(user: dict, ctx: dict | None = None) -> str:
     first, _, rest = user["name"].partition(" ")
     name = (f'<tspan>{esc(first)} </tspan><tspan fill="url(#og)">{esc(rest)}</tspan>' if rest
             else f'<tspan fill="url(#og)">{esc(first)}</tspan>')
-    greeting = {"morning": "Suprabhat ☀", "afternoon": "Namaste 🙏", "evening": "Shubh Sandhya 🪔",
+    # IST: morning 5-12, afternoon 12-17, evening 17-20, night otherwise
+    greeting = {"morning": "Shubh Prabhat ☀", "afternoon": "Shubh Dopahar 🌤", "evening": "Shubh Sandhya 🪔",
                 "night": "Shubh Ratri 🌙"}[phase]
-    b += f'<text x="34" y="56" font-size="17" class="muted rise">{greeting} — I\'m</text>'
+    b += f'<text x="34" y="56" font-size="17" class="muted rise">Namaste 🙏 · {greeting} — I\'m</text>'
     b += f'<text x="32" y="102" font-size="44" font-weight="800" class="rise" {d(.15)} filter="url(#glow)">{name}</text>'
     b += f'<text x="34" y="134" font-size="19" font-weight="600" class="rise" {d(.3)}>{esc(c["role"])}</text>'
     for i, line in enumerate(wrap(_tagline(user, c), 66, 3)):
