@@ -437,16 +437,6 @@ def tech_repos(tech: dict, marker: str) -> int:
     return sum(1 for tokens in tech["repos"].values() if marker in tokens)
 
 
-def untracked_languages(tech: dict, limit: int = 4) -> list[tuple[str, int]]:
-    """Languages found in repos that no TECH_STACK item covers, most used first."""
-    keys = [k for items in config.TECH_STACK.values() for name, _, _ in items
-            for k in config.TECH_ALIASES.get(name, [name.lower()]) if k != "*"]
-    skip = {"Makefile", "Procfile", "Batchfile", "Dockerfile"}
-    out = [(lang, n) for lang, n in tech["languages"].most_common()
-           if lang not in skip and not any(_matches(k, {lang.lower()}) for k in keys)]
-    return out[:limit]
-
-
 # ------------------------------------------------------------------ helpers
 
 def time_ago(iso: str | None) -> str:

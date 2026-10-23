@@ -176,25 +176,10 @@ def _tile(x, y, name, label, color, delay, repos=0):
             f'{count_badge(x + 37, y + 1, repos)}</g>')
 
 
-def _short_label(name: str) -> str:
-    if len(name) <= 3:
-        return name
-    words = name.split()
-    return "".join(w[0] for w in words[:2]).upper() if len(words) > 1 else name[:2]
-
-
-FRONTEND_LANGS = {"Vue", "Svelte", "Astro", "SCSS", "Less", "Dart", "Elm"}
-
-
 def tech_stack(tech: dict, n: int = 3) -> str:
     W = 850
-    cats = {cat: [(name, label, color, gh.tech_count(tech, name)) for name, label, color in items]
-            for cat, items in config.TECH_STACK.items()}
-    # languages the repos use that the config doesn't list yet
-    for lang, count in gh.untracked_languages(tech):
-        cat = "Frontend" if lang in FRONTEND_LANGS and "Frontend" in cats else "Backend"
-        cats.setdefault(cat, []).append((lang, _short_label(lang), gh.lang_color(lang), count))
-    cats = list(cats.items())
+    cats = [(cat, [(name, label, color, gh.tech_count(tech, name)) for name, label, color in items])
+            for cat, items in config.TECH_STACK.items()]
     used = len(tech["repos"])
     rows = max((len(items) + 2) // 3 for _, items in cats)
     ph = 40 + rows * 62

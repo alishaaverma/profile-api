@@ -45,7 +45,7 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/tech-stack` | `TECH_STACK` with per-tool repo counts, plus languages your repos use that the config misses |
+| `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
 | `/card/architecture`, `/card/cloud` | most used tools per layer, repos with Docker / GitHub Actions / AWS |
 | `/card/achievements` | stars, commits, PRs, yearly contributions, repos, years on GitHub |
 | `/card/what-i-build`, `/card/backend`, `/card/workflow`, `/card/problem-solution`, `/card/collaborate` | content from `app/config.py` |
