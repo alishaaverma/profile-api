@@ -44,7 +44,9 @@ def hero(user: dict) -> str:
     first, _, rest = user["name"].partition(" ")
     name = (f'<tspan>{esc(first)} </tspan><tspan fill="url(#og)">{esc(rest)}</tspan>' if rest
             else f'<tspan fill="url(#og)">{esc(first)}</tspan>')
-    b += '<text x="34" y="56" font-size="17" class="muted rise">Hi, I\'m</text>'
+    greeting = {"morning": "Suprabhat ☀", "afternoon": "Namaste 🙏", "evening": "Shubh Sandhya 🪔",
+                "night": "Shubh Ratri 🌙"}[phase]
+    b += f'<text x="34" y="56" font-size="17" class="muted rise">{greeting} — I\'m</text>'
     b += f'<text x="32" y="102" font-size="44" font-weight="800" class="rise" {d(.15)} filter="url(#glow)">{name}</text>'
     b += f'<text x="34" y="134" font-size="19" font-weight="600" class="rise" {d(.3)}>{esc(P["role"])}</text>'
     for i, line in enumerate(wrap(P["tagline"], 66, 3)):
@@ -315,6 +317,10 @@ def _icon(kind: str, x: float, y: float) -> str:
     if k in ("email", "mail"):
         return (f'<rect x="{x}" y="{y + 2}" width="18" height="14" rx="2" stroke="{ORANGE}" stroke-width="1.6"/>'
                 f'<path d="M{x + 1} {y + 3}l8 6.5 8-6.5" stroke="{ORANGE}" stroke-width="1.6"/>')
+    if k == "cookie":
+        return (f'<circle cx="{x + 9}" cy="{y + 9}" r="8.5" fill="#c98b4a" stroke="#8a5a2b"/>'
+                + "".join(f'<circle cx="{x + cx}" cy="{y + cy}" r="1.6" fill="#3b2412"/>'
+                          for cx, cy in ((6, 6), (12, 7), (8, 12), (13, 12), (4, 10))))
     if k == "resume":
         return (f'<path d="M{x + 3} {y}h8l5 5v13h-13z" stroke="{ORANGE}" stroke-width="1.6"/>'
                 f'<path d="M{x + 6} {y + 9}h7M{x + 6} {y + 12.5}h7M{x + 6} {y + 16}h4" stroke="{ORANGE}" stroke-width="1.4"/>')

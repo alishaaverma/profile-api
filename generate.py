@@ -30,13 +30,15 @@ BUTTONS = {
     "button-linkedin": ("LinkedIn", "", False),
     "button-email": ("Email", "", False),
     "button-resume": ("Resume", "", False),
+    "button-feed-byte": ("Feed Byte a cookie", "cookie", True),
 }
 
 
 async def render(login: str) -> tuple[dict[str, str], list[dict]]:
-    user, repos, events, stats, cal, tech, festivals, weather, commits = await asyncio.gather(
+    user, repos, events, stats, cal, tech, festivals, weather, commits, til, feeds = await asyncio.gather(
         gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login),
-        gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login))
+        gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login), gh.get_til(login),
+        gh.get_byte_feeds(login))
     set_festival_dates(festivals)
     top = gh.featured(repos["repos"], 4)
     building = await gh.get_now_building(login, repos)
@@ -44,20 +46,21 @@ async def render(login: str) -> tuple[dict[str, str], list[dict]]:
     # Section numbers follow the order of the cards in the profile README.
     cards = {
         "hero": prof.hero(user),
-        "city": live.contribution_city(user, cal, weather),
+        "city": live.contribution_city(user, cal, weather, feeds),
         "about": prof.about(user, 2),
-        "tech-stack": prof.tech_stack(tech, 3),
-        "smart-contracts": live.smart_contract_lab(user, repos, tech, 4),
-        "what-i-build": prof.what_i_build(5),
+        "smart-contracts": live.smart_contract_lab(user, repos, tech, 3),
         "featured-projects": prof.section_heading("Featured Projects",
                                                    {"newest": "My latest public repositories, live from GitHub",
                                                     "updated": "My most recently updated repositories, live from GitHub"}
-                                                   .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 6),
-        "now-building": live.now_building(building, 7),
-        "coding-dna": live.coding_dna(commits, 8),
+                                                   .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 4),
+        "now-building": live.now_building(building, 5),
+        "coding-dna": live.coding_dna(commits, 6),
+        # the rest sits under "Explore more about me" in the profile README
+        "tech-stack": prof.tech_stack(tech, 7),
+        "what-i-build": prof.what_i_build(8),
         "architecture": eng.architecture(tech, 9),
         "timeline": live.timeline_opensource(user, repos, stats, cal, 10),
-        "analytics": live.analytics_exploring(user, stats, cal, 12),
+        "analytics": live.analytics_exploring(user, stats, cal, repos, tech, til, 12),
         "activity": live.activity_terminal(user, repos, events, 14),
         "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos", 16),
         "cloud": eng.cloud_deploy(tech, 17),

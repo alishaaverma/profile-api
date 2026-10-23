@@ -41,11 +41,11 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/about` | repos, account age |
 | `/card/project/{0-3}` | top repos: stars, forks, language, topics, last push |
 | `/card/timeline` | journey built from repo creation years (titles in `TIMELINE_TITLES`), PRs, issues, commits per repo |
-| `/card/analytics` | commits, followers, contribution heatmap |
+| `/card/analytics` | commits, followers, contribution heatmap; live "Currently Exploring" (tools used by repos pushed in the last 90 days) and the newest lines of `TIL.md` in your `til` repo |
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes and Byte, a coding pet that grows with your best streak and sulks when you stop committing |
+| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes, a flooded street with paper boats when it rains, and Byte, a coding pet that grows with your best streak, sulks when you stop committing and counts the cookies visitors feed it |
 | `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
 | `/card/smart-contracts` | Smart Contract Lab: a live `Profile.sol`, Solidity repos and detected Web3 tools |
 | `/card/now-building` | most recently pushed repo, its latest commit and 30-day commit momentum |
@@ -77,3 +77,21 @@ Edit `app/config.py`. It holds the tagline, about text, tech stack, journey titl
 workflow and pinned repos (`FEATURED_REPOS`). `TECH_ALIASES` controls how each tech-stack item is spotted in a repo
 (languages, topics, description, `package.json` / `requirements.txt` dependencies, Dockerfile, workflows). Adding
 topics to your repos on GitHub makes the counts more accurate.
+
+## Feed Byte
+
+The "Feed Byte a cookie" button in the profile README opens an issue titled `Feed Byte 🍪` on the profile
+repo. `.github/workflows/feed-byte.yml` in that repo thanks the visitor and closes the issue, and the next
+render of Contribution City shows how many cookies Byte got and who fed it last. Issues must be enabled on the
+profile repo.
+
+## Today I Learned
+
+Create a public repo named `til` (or change `TIL_REPO` in `app/config.py`) with a `TIL.md`, newest first:
+
+```markdown
+- 2026-10-23: Solidity events are a cheap way to log data on-chain
+- 2026-10-20: FastAPI background tasks run after the response is sent
+```
+
+The analytics card shows the newest two entries.

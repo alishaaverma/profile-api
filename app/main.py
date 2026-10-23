@@ -68,10 +68,11 @@ async def card_about(username: str | None = None, n: int = 2):
 async def card_city(username: str | None = None):
     async def f():
         login = _user(username)
-        user, cal, festivals, weather = await asyncio.gather(
-            gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates(), gh.get_weather())
+        user, cal, festivals, weather, feeds = await asyncio.gather(
+            gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates(), gh.get_weather(),
+            gh.get_byte_feeds(login))
         set_festival_dates(festivals)
-        return live.contribution_city(user, cal, weather)
+        return live.contribution_city(user, cal, weather, feeds)
     return await _render(f)
 
 
@@ -137,11 +138,13 @@ async def card_timeline(username: str | None = None, n: int = 7):
 
 
 @app.get("/card/analytics")
-async def card_analytics(username: str | None = None, n: int = 9):
+async def card_analytics(username: str | None = None, n: int = 12):
     async def f():
         login = _user(username)
-        user, stats, cal = await asyncio.gather(gh.get_user(login), gh.get_stats(login), gh.get_calendar(login))
-        return live.analytics_exploring(user, stats, cal, n)
+        user, stats, cal, repos, tech, til = await asyncio.gather(
+            gh.get_user(login), gh.get_stats(login), gh.get_calendar(login), gh.get_repos(login), gh.get_tech(login),
+            gh.get_til(login))
+        return live.analytics_exploring(user, stats, cal, repos, tech, til, n)
     return await _render(f)
 
 

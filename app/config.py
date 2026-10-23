@@ -200,13 +200,10 @@ TIMELINE_TITLES = {
     "2026": "Scaling up",
 }
 
-EXPLORING = [
-    ("Advanced Backend Systems", 80),
-    ("Cloud Architecture", 70),
-    ("Real-time Applications", 65),
-    ("System Design", 60),
-    ("Automation & Integrations", 55),
-]
+# "Currently Exploring" is live: the TECH_STACK items used by repos pushed in the last 90 days.
+# Below it, the newest lines of TIL.md in this repo of yours (create it to switch the feed on):
+#   - 2026-10-23: Solidity events are a cheap way to log data on-chain
+TIL_REPO = "til"
 
 WORKFLOW = [
     ("Idea", "Understand needs"),

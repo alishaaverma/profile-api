@@ -186,7 +186,8 @@ def timeline_opensource(user: dict, repos: dict, stats: dict, calendar: dict, n:
 HEAT = ["#161b22", "#4a2a12", "#8a4210", "#d4651a", "#ff9b50"]
 
 
-def analytics_exploring(user: dict, stats: dict, calendar: dict, n: int = 9) -> str:
+def analytics_exploring(user: dict, stats: dict, calendar: dict, repos: dict, tech: dict,
+                        til: list[dict] | None = None, n: int = 12) -> str:
     W, H = 850, 262
     b = frame(W, H)
     b += heading(24, 20, n, "GitHub Analytics", "My contribution activity")
@@ -229,16 +230,48 @@ def analytics_exploring(user: dict, stats: dict, calendar: dict, n: int = 9) -> 
     b += synced(24, 248, right=False)
 
     b += f'<line x1="530" y1="22" x2="530" y2="{H - 22}" stroke="{BORDER}"/>'
-    b += heading(546, 20, n + 1, "Currently Exploring", "Always learning, always building")
-    for i, (label, pct) in enumerate(config.EXPLORING[:5]):
-        y = 84 + i * 34
+    b += heading(546, 20, n + 1, "Currently Exploring", "Live: what my last 90 days of repos use")
+    items = exploring(repos, tech)[:3 if til else 5]
+    top = max((c for _, c, _ in items), default=1)
+    for i, (label, count, new) in enumerate(items):
+        y = 84 + i * 28
         b += (f'<g class="rise" {d(.3 + i * .12)}>' + dot(552, y - 4, 3.5, ORANGE, "") +
               f'<text x="562" y="{y}" font-size="11" fill="#c9d1d9">{esc(label)}</text>'
-              f'<text x="826" y="{y}" text-anchor="end" font-size="10.5" class="mono ink" fill="{AMBER}">{pct}%</text>'
-              f'<rect x="562" y="{y + 7}" width="264" height="6" rx="3" fill="#1d1712"/>'
-              f'<rect x="562" y="{y + 7}" width="{264 * pct / 100:.0f}" height="6" rx="3" fill="url(#og)" class="grow" '
+              f'<text x="826" y="{y}" text-anchor="end" font-size="10" class="mono ink" fill="{AMBER}">'
+              f'{count} repo{"s" if count != 1 else ""}{f" · +{new} new" if new else ""}</text>'
+              f'<rect x="562" y="{y + 6}" width="264" height="5" rx="2.5" fill="#1d1712"/>'
+              f'<rect x="562" y="{y + 6}" width="{264 * count / top:.0f}" height="5" rx="2.5" fill="url(#og)" class="grow" '
               f'filter="url(#glow)" {d(.5 + i * .15)}/></g>')
+    if not items:
+        b += f'<text x="552" y="90" font-size="10.5" class="muted">Nothing pushed in the last 90 days — yet.</text>'
+    if til:
+        ty = 84 + len(items) * 28 + 10
+        b += f'<text x="546" y="{ty}" font-size="11.5" font-weight="700" class="fade" {d(.8)}>📒 Today I Learned</text>'
+        for i, entry in enumerate(til[:2]):
+            y = ty + 20 + i * 30
+            when = datetime.strptime(entry["date"], "%Y-%m-%d").strftime("%d %b") if entry["date"] else ""
+            lines = wrap(entry["text"], 44, 2)
+            b += (f'<g class="rise" {d(.9 + i * .1)}><rect x="546" y="{y - 11}" width="3" height="{14 * len(lines) + 2}" rx="1.5" fill="{ORANGE}"/>'
+                  + "".join(f'<text x="556" y="{y + j * 13}" font-size="10" fill="#c9d1d9">{esc(line)}</text>' for j, line in enumerate(lines))
+                  + (f'<text x="826" y="{y}" text-anchor="end" font-size="8.5" class="dim">{when}</text>' if when else "") + "</g>")
     return svg(W, H, b, title="GitHub Analytics & Currently Exploring")
+
+
+def exploring(repos: dict, tech: dict, days: int = 90) -> list[tuple[str, int, int]]:
+    """(TECH_STACK item, repos pushed in the last `days` using it, of which created in the last 30 days)."""
+    now = datetime.now(timezone.utc)
+    age = lambda iso: (now - datetime.fromisoformat(iso.replace("Z", "+00:00"))).days if iso else 10 ** 6
+    recent = {r["name"] for r in repos["repos"] if age(r["pushed_at"]) <= days}
+    fresh = {r["name"] for r in repos["repos"] if age(r.get("created_at")) <= 30}
+    out = []
+    for items in config.TECH_STACK.values():
+        for name, _, _ in items:
+            if config.TECH_ALIASES.get(name) == ["*"]:  # Git/GitHub: every repo, says nothing
+                continue
+            used = set(gh.tech_repo_names(tech, name)) & recent
+            if used:
+                out.append((name, len(used), len(used & fresh)))
+    return sorted(out, key=lambda t: (-t[1], -t[2]))
 
 
 # ------------------------------------------------- activity + terminal
@@ -782,7 +815,7 @@ PET_LINES = {
 }
 
 
-def contribution_city(user: dict, calendar: dict, weather: dict | None = None) -> str:
+def contribution_city(user: dict, calendar: dict, weather: dict | None = None, feeds: dict | None = None) -> str:
     """Last year of contributions as a 3D city: one building per day, under the sky, weather and
     festival of the moment in India, with a coding pet that lives on my streak."""
     phase, fest = sky_phase(), festival_today()
@@ -823,9 +856,17 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None) -
     sx, step, bw, ox = 13.2, 5, 10, 4
     x0 = (W - (len(weeks) * sx + 6 * step + bw)) / 2
     ground = 230
-    b += (f'<polygon points="{x0 - 6:.0f},{ground + 4} {x0 + len(weeks) * sx + 4:.0f},{ground + 4} '
-          f'{x0 + len(weeks) * sx + 6 * step + 10:.0f},{ground - 6 * step - 4} {x0 + 6 * step:.0f},{ground - 6 * step - 4}" '
-          f'fill="#0b111a" stroke="{BORDER}"/>')
+    floor = (f'{x0 - 6:.0f},{ground + 4} {x0 + len(weeks) * sx + 4:.0f},{ground + 4} '
+             f'{x0 + len(weeks) * sx + 6 * step + 10:.0f},{ground - 6 * step - 4} {x0 + 6 * step:.0f},{ground - 6 * step - 4}')
+    b += f'<polygon points="{floor}" fill="#0b111a" stroke="{BORDER}"/>'
+    monsoon = bool(weather) and weather["kind"] in ("rain", "storm")
+    if monsoon:  # the streets flood: water over the floor with rings where the drops land
+        b += f'<polygon points="{floor}" fill="#2f6fb0" fill-opacity=".38"/>'
+        wr = random.Random(7)
+        for _ in range(16):
+            rx_, ry_ = x0 + wr.random() * len(weeks) * sx, ground - wr.random() * 6 * step
+            b += (f'<ellipse cx="{rx_ + (ground - ry_):.0f}" cy="{ry_:.0f}" rx="5" ry="1.6" stroke="#9ec9ff" stroke-opacity=".6" '
+                  f'class="pulse" style="animation-delay:{wr.random() * 2:.1f}s"/>')
     rnd = random.Random(calendar["total"])
     today = days[-1]["date"] if days else ""
     blocks = []
@@ -867,6 +908,11 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None) -
               f'<text x="{px:.1f}" y="{py - 20:.1f}" text-anchor="middle" font-size="9.5" font-weight="700" fill="{AMBER}">{esc(label)}</text></g>')
     if fest in GROUND_FESTIVALS:
         b += festival_ground(fest, x0, ground + 18, len(weeks) * sx + 30, n=30)
+    if monsoon:  # paper boats drifting along the flooded front street
+        for i, (bx_, by_) in enumerate(((x0 + 160, ground - 3), (x0 + 420, ground - 12), (x0 + 600, ground - 5))):
+            b += (f'<g class="fly" style="animation-duration:{38 + i * 9}s;animation-delay:{-i * 13}s">'
+                  f'<path d="M{bx_ - 9},{by_ - 3}h18l-4,5h-10z" fill="#f2f5f9" stroke="#9aa6b8" stroke-width=".6"/>'
+                  f'<path d="M{bx_ - 4},{by_ - 3}l4,-8 4,8z" fill="#ffffff" stroke="#9aa6b8" stroke-width=".6"/></g>')
 
     # the coding pet, on the empty lots at the front left
     idle = 0
@@ -878,6 +924,11 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None) -
     stage = "egg" if longest < 3 else "chick" if longest < 7 else "bird"
     px, pbase = x0 + 70, ground - 2
     line = PET_LINES[mood].format(days=idle)
+    # a visitor's cookie (a "Feed Byte" issue) in the last day cheers Byte up
+    if feeds and feeds["last_at"] and \
+            (datetime.now(timezone.utc) - datetime.fromisoformat(feeds["last_at"].replace("Z", "+00:00"))).days < 1:
+        mood, line = "happy", f"Thanks @{trunc(feeds['last_by'], 16)} for the cookie!"
+    fed = f" · 🍪 fed {feeds['count']}×" if feeds and feeds["count"] else " · feed me 🍪"
     bw_ = len(line) * 5.3 + 18
     b += (f'<g class="pop" {d(1.6)}>{_pet(px, pbase, stage, mood)}'
           f'<rect x="{px + 22}" y="{pbase - 66}" width="{bw_:.0f}" height="20" rx="10" fill="#ffffff" fill-opacity=".92"/>'
@@ -885,7 +936,7 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None) -
           f'<text x="{px + 22 + bw_ / 2:.0f}" y="{pbase - 52}" text-anchor="middle" font-size="9.5" font-weight="700" '
           f'fill="#1a0d02">{esc(line)}</text>'
           f'<text x="{px}" y="{pbase + 14}" text-anchor="middle" font-size="8" class="dim">'
-          f'{esc(config.PET_NAME)} · {stage}</text></g>')
+          f'{esc(config.PET_NAME)} · {stage}{esc(fed)}</text></g>')
 
     b += synced(24, H - 12, right=False)
     note = FESTIVALS[fest][0] if fest else ""

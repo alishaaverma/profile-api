@@ -547,6 +547,56 @@ async def get_festival_dates() -> dict[str, str]:
     return await _cached("festivals", load)
 
 
+# --------------------------------------------------------------- feed Byte
+
+async def get_byte_feeds(login: str) -> dict | None:
+    """Visitors feed the city's pet by opening a "Feed Byte" issue on my profile repo:
+    {'count', 'last_by', 'last_at'}; None if the search fails."""
+
+    async def load():
+        try:
+            raw = await _get("/search/issues", q=f'repo:{login}/{login} is:issue in:title "Feed Byte"',
+                             sort="created", order="desc", per_page=1)
+        except GitHubError:
+            return None
+        items = raw.get("items") or []
+        return {"count": raw.get("total_count", 0),
+                "last_by": items[0]["user"]["login"] if items else "",
+                "last_at": items[0]["created_at"] if items else ""}
+
+    return await _cached(f"feeds:{login}", load)
+
+
+# ---------------------------------------------------------- today I learned
+
+_TIL_LINE = re.compile(r"^\s*[-*]\s+(?:\*\*)?(\d{4}-\d{2}-\d{2})?(?:\*\*)?\s*[:—–-]?\s*(.+?)\s*$")
+
+
+async def get_til(login: str, limit: int = 3) -> list[dict]:
+    """Newest entries of TIL.md in my config.TIL_REPO repo: [{'date', 'text'}].
+    One bullet per thing learned, newest at the top, e.g. "- 2026-10-23: Solidity events are cheap logs"."""
+
+    async def load():
+        url = f"https://raw.githubusercontent.com/{login}/{config.TIL_REPO}/HEAD/TIL.md"
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                r = await client.get(url)
+        except httpx.HTTPError:
+            return []
+        if r.status_code != 200:
+            return []
+        out = []
+        for line in r.text.splitlines():
+            m = _TIL_LINE.match(line)
+            if m:
+                out.append({"date": m.group(1) or "", "text": re.sub(r"[`*_]", "", m.group(2))})
+            if len(out) == limit:
+                break
+        return out
+
+    return await _cached(f"til:{login}", load)
+
+
 # ------------------------------------------------------------------ weather
 
 # WMO weather code -> (kind drawn on the city, words)
