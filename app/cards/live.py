@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import re
 from collections import Counter
@@ -11,9 +12,9 @@ from datetime import datetime, timezone
 from .. import config
 from .. import github as gh
 from ..github import featured, lang_color, time_ago
-from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, MUTED,
-                    ORANGE, SKIES, TEXT, celestial, compact, d, dot, esc, festival_ground, festival_sky,
-                    festival_today, frame, heading, panel,
+from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, LOW_SUN,
+                    MUTED, ORANGE, SKIES, TEXT, WEATHER_CSS, aqi_color, celestial, compact, d, dot, esc,
+                    festival_ground, festival_sky, festival_today, frame, heading, panel, weather_sky,
                     phase_label, sky, sky_phase, stars, svg, synced, trunc, wrap)
 
 STAR = "M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
@@ -492,6 +493,98 @@ def now_building(data: dict | None, n: int | None = 7) -> str:
     return svg(W, H, b, title="Now Building")
 
 
+# ------------------------------------------------------------ coding DNA
+
+# persona -> hours (local time of each commit) and how the share is described
+CODER_TYPES = [
+    ("Night Owl", set(range(22, 24)) | set(range(0, 5)), "between 10 PM and 5 AM"),
+    ("Early Bird", set(range(5, 11)), "between 5 and 11 AM"),
+    ("Daytime Coder", set(range(11, 18)), "between 11 AM and 6 PM"),
+    ("Evening Coder", set(range(18, 22)), "between 6 and 10 PM"),
+]
+
+
+def _hsl(h: float, s: float, l: float) -> str:
+    import colorsys
+
+    r, g, b_ = colorsys.hls_to_rgb(h, l, s)
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b_ * 255):02x}"
+
+
+def coding_dna(commits: list[dict], n: int | None = 8) -> str:
+    """When I code (a 24-hour clock of my commits) and generative art grown from my commit hashes."""
+    W, H = 850, 270
+    b = frame(W, H)
+    b += heading(24, 20, n, "Coding DNA", "When I code, and art generated from my latest commits")
+    if not commits:
+        b += f'<text x="{W / 2}" y="150" text-anchor="middle" font-size="13" class="muted">Waiting for my first public commits…</text>'
+        return svg(W, H, b, title="Coding DNA")
+
+    hours = Counter(int(c["date"][11:13]) for c in commits)
+    days = Counter(datetime.fromisoformat(c["date"].replace("Z", "+00:00")).strftime("%A") for c in commits)
+    total = len(commits)
+    persona, span, words = max(CODER_TYPES, key=lambda t: sum(hours[h] for h in t[1]))
+    share = round(100 * sum(hours[h] for h in span) / total)
+    peak_hour = max(range(24), key=lambda h: hours[h])
+
+    # 24-hour radial clock
+    cx, cy, r0, r1 = 150, 162, 26, 68
+    top = max(hours.values())
+    b += f'<circle cx="{cx}" cy="{cy}" r="{r1 + 6}" fill="#0b1018" stroke="{BORDER}"/>'
+    b += f'<circle cx="{cx}" cy="{cy}" r="{r0 - 4}" fill="url(#cardg)" stroke="{BORDER}"/>'
+    for h in range(24):
+        a = math.radians(h * 15 - 90)
+        length = (r1 - r0) * (hours[h] / top) if hours[h] else 2
+        in_span = h in span
+        x1, y1 = cx + r0 * math.cos(a), cy + r0 * math.sin(a)
+        x2, y2 = cx + (r0 + length) * math.cos(a), cy + (r0 + length) * math.sin(a)
+        b += (f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{ORANGE if in_span else "#4a5a72"}" '
+              f'stroke-width="5.5" stroke-linecap="round" class="fade" style="animation-delay:{.3 + h * .04:.2f}s">'
+              f'<title>{hours[h]} commits at {h:02d}:00</title></line>')
+    for h, label in ((0, "12AM"), (6, "6AM"), (12, "12PM"), (18, "6PM")):
+        a = math.radians(h * 15 - 90)
+        b += (f'<text x="{cx + (r1 + 22) * math.cos(a):.0f}" y="{cy + (r1 + 14) * math.sin(a) + 3:.0f}" text-anchor="middle" '
+              f'font-size="8.5" class="dim">{label}</text>')
+    icon = {"Night Owl": "🦉", "Early Bird": "🐦", "Daytime Coder": "☀", "Evening Coder": "🌆"}[persona]
+    b += f'<text x="{cx}" y="{cy + 6}" text-anchor="middle" font-size="18">{icon}</text>'
+
+    # habits
+    tx = 290
+    b += (f'<g class="rise" {d(.3)}><text x="{tx}" y="96" font-size="24" font-weight="800" fill="url(#og)">{persona}</text>'
+          f'<text x="{tx}" y="116" font-size="11" fill="#c9d1d9">{share}% of my commits land {words}</text></g>')
+    weekend = round(100 * (days["Saturday"] + days["Sunday"]) / total)
+    facts = [("Peak hour", f"{peak_hour % 12 or 12} {'AM' if peak_hour < 12 else 'PM'}"),
+             ("Busiest day", max(days, key=days.get)),
+             ("Weekend commits", f"{weekend}%"),
+             ("Commits sampled", str(total))]
+    for i, (k, v) in enumerate(facts):
+        y = 146 + i * 24
+        b += (f'<g class="rise" {d(.45 + i * .08)}>' + dot(tx + 4, y - 4, 3, ORANGE, "") +
+              f'<text x="{tx + 14}" y="{y}" font-size="10.5" class="muted">{k}</text>'
+              f'<text x="{tx + 210}" y="{y}" text-anchor="end" font-size="11" font-weight="700" fill="{AMBER}">{esc(v)}</text></g>')
+
+    # generative art from the latest commit hashes (and today's date, so it shifts daily)
+    ax, ay = 690, 150
+    seed = datetime.now(timezone.utc).strftime("%Y%m%d")
+    petals = commits[:24]
+    art = ""
+    for i, c in enumerate(petals):
+        hb = bytes.fromhex(c["sha"][:12])
+        angle = i * 360 / len(petals) + hb[0] / 255 * 12
+        length = 26 + hb[1] / 255 * 50
+        width = 4 + hb[2] / 255 * 10
+        color = _hsl(((hb[3] / 255) * .25 + int(seed) % 97 / 97) % 1, .85, .6)
+        art += (f'<ellipse cx="{ax}" cy="{ay - length / 2:.1f}" rx="{width:.1f}" ry="{length / 2:.1f}" fill="{color}" '
+                f'fill-opacity=".55" transform="rotate({angle:.1f} {ax} {ay})"><title>{c["sha"][:7]} · {esc(c["repo"])}</title></ellipse>')
+    b += f'<rect x="560" y="66" width="266" height="178" rx="10" fill="#0b1018" stroke="{BORDER}"/>'
+    b += f'<g class="spin" style="animation-duration:90s">{art}</g>'
+    b += f'<circle cx="{ax}" cy="{ay}" r="9" fill="url(#og)" filter="url(#glow)"/>'
+    b += (f'<text x="693" y="238" text-anchor="middle" font-size="8.5" class="dim">'
+          f'grown from my last {len(petals)} commit hashes · redraws on every push</text>')
+    b += synced(24, H - 8, right=False)
+    return svg(W, H, b, title="Coding DNA")
+
+
 # ---------------------------------------------------- smart contract lab
 
 SOL_KEYWORDS = {"pragma", "solidity", "contract", "public", "external", "function", "event", "indexed",
@@ -537,16 +630,10 @@ def _eth_diamond(cx, cy, s=14) -> str:
 
 
 def smart_contract_lab(user: dict, repos: dict, tech: dict, n: int | None = 4) -> str:
-    W, H = 850, 360
     sol = gh.tech_repo_names(tech, "Solidity")
     by_name = {r["name"]: r for r in repos["repos"]}
     sol_repos = sorted((by_name[n] for n in sol if n in by_name), key=lambda r: r["pushed_at"] or "", reverse=True)
     tools = ["Solidity"] + [label for label, alias in WEB3_TOOLS if gh.tech_count(tech, alias)]
-
-    b = frame(W, H)
-    b += f'<circle cx="780" cy="40" r="70" fill="{ETH}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
-    b += heading(24, 20, n, "Smart Contract Lab", "Solidity & Web3 — where my full-stack work goes on-chain")
-    b += _eth_diamond(800, 40)
 
     # editor with a contract written from the live profile
     ident = re.sub(r"\W", "", user["name"].title()) or "Developer"
@@ -569,6 +656,12 @@ def smart_contract_lab(user: dict, repos: dict, tech: dict, n: int | None = 4) -
     ]
     ex, ey, ew = 24, 70, 452
     eh = 34 + len(code) * 14 + 26
+    W, H = 850, ey + eh + 22
+
+    b = frame(W, H)
+    b += f'<circle cx="780" cy="40" r="70" fill="{ETH}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
+    b += heading(24, 20, n, "Smart Contract Lab", "Solidity & Web3 — where my full-stack work goes on-chain")
+    b += _eth_diamond(800, 40)
     b += f'<g class="rise" {d(.1)}>' + panel(ex, ey, ew, eh, 10, stroke="#2b2f55", fill="#0a0c16")
     b += f'<rect x="{ex}" y="{ey}" width="{ew}" height="24" rx="10" fill="#11142a"/>'
     b += f'<rect x="{ex}" y="{ey + 14}" width="{ew}" height="10" fill="#11142a"/>'
@@ -585,7 +678,7 @@ def smart_contract_lab(user: dict, repos: dict, tech: dict, n: int | None = 4) -
     yb = ey + eh - 10
     b += (f'<text x="{ex + 12}" y="{yb}" font-size="9.5" class="mono fade" fill="{GREEN}" {d(.6 + len(code) * .18)}>'
           f'✓ Compiled Profile.sol · 0 errors</text>')
-    b += f'<rect x="{ex + 34 + 1 * 6}" y="{ey + 42 + 14 * 14 - 9}" width="6" height="11" fill="{ETH}" class="blink"/>'
+    b += f'<rect x="{ex + 34 + 1 * 6}" y="{ey + 42 + 14 * (len(code) - 1) - 9}" width="6" height="11" fill="{ETH}" class="blink"/>'
 
     # right column: live Solidity repos and detected tooling
     rx = 494
@@ -637,8 +730,61 @@ def _streaks(days: list[dict]) -> tuple[int, int]:
     return current, longest
 
 
-def contribution_city(user: dict, calendar: dict) -> str:
-    """Last year of contributions as a 3D city: one building per day, lit for the time of day."""
+def _pet(cx: float, base: float, stage: str, mood: str) -> str:
+    """The city's coding pet. stage: egg / chick / bird (grows with my best streak);
+    mood: happy / waiting / sad / sleeping (how long since my last contribution)."""
+    if stage == "egg":
+        fx, fy = cx, base - 13
+        o = (f'<ellipse cx="{cx}" cy="{base - 13}" rx="10" ry="13" fill="#f3e9d2" stroke="#c9b48a"/>'
+             f'<circle cx="{cx - 5}" cy="{base - 20}" r="1.8" fill="#d9c49a"/><circle cx="{cx + 5}" cy="{base - 6}" r="1.4" fill="#d9c49a"/>')
+    elif stage == "chick":
+        fx, fy = cx + 2, base - 14
+        o = (f'<path d="M{cx - 4},{base}v-3M{cx + 4},{base}v-3" stroke="{ORANGE}" stroke-width="1.6"/>'
+             f'<circle cx="{cx}" cy="{base - 12}" r="11" fill="#ffd84d" stroke="#e0b52c"/>'
+             f'<ellipse cx="{cx - 7}" cy="{base - 10}" rx="4" ry="6" fill="#f2c230" transform="rotate(20 {cx - 7} {base - 10})"/>'
+             f'<path d="M{cx + 10},{base - 13}l5,1.5 -5,1.5z" fill="{ORANGE}"/>')
+    else:
+        fx, fy = cx + 9, base - 24
+        o = (f'<path d="M{cx - 4},{base}v-5M{cx + 4},{base}v-5" stroke="#c2410c" stroke-width="1.8"/>'
+             f'<path d="M{cx - 13},{base - 14}l-9,-4 2,6 -3,4z" fill="#c2410c"/>'
+             f'<ellipse cx="{cx}" cy="{base - 13}" rx="14" ry="11" fill="{ORANGE}" stroke="#c2410c"/>'
+             f'<ellipse cx="{cx + 2}" cy="{base - 10}" rx="8" ry="6" fill="#ffd2a8"/>'
+             f'<ellipse cx="{cx - 5}" cy="{base - 14}" rx="7" ry="5" fill="#d9480f" transform="rotate(-15 {cx - 5} {base - 14})"/>'
+             f'<circle cx="{cx + 9}" cy="{base - 24}" r="8" fill="{ORANGE}" stroke="#c2410c"/>'
+             f'<path d="M{cx + 7},{base - 31}l-2,-6M{cx + 10},{base - 32}l1,-6M{cx + 12},{base - 31}l4,-5" stroke="#d9480f" stroke-width="1.8" stroke-linecap="round"/>'
+             f'<path d="M{cx + 16},{base - 24}l6,2 -6,2z" fill="#ffd76a"/>')
+    # face
+    if mood == "happy":
+        o += (f'<path d="M{fx - 4},{fy}q1.5,-2.5 3,0M{fx + 1.5},{fy}q1.5,-2.5 3,0" stroke="#1a0d02" stroke-width="1.3"/>'
+              f'<circle cx="{fx - 4}" cy="{fy + 3}" r="1.6" fill="#ff7b9c" fill-opacity=".7"/>')
+    elif mood == "sleeping":
+        o += f'<path d="M{fx - 4},{fy}h3M{fx + 1.5},{fy}h3" stroke="#1a0d02" stroke-width="1.3"/>'
+    else:
+        o += f'<circle cx="{fx - 2.5}" cy="{fy}" r="1.4" fill="#1a0d02"/><circle cx="{fx + 3}" cy="{fy}" r="1.4" fill="#1a0d02"/>'
+        if mood == "sad":
+            o += f'<path d="M{fx - 3},{fy + 1.5}q-1,3 0,4q1,-1 0,-4z" fill="#58a6ff"/>'
+    cls = {"happy": 'class="float" style="animation-duration:.9s"', "sleeping": 'class="pulse" style="animation-duration:4s"'}
+    out = f'<g {cls.get(mood, "")}>{o}</g>'
+    if mood == "happy":
+        out += "".join(f'<path d="M{cx + dx},{base - 40 - k * 4}c-2,-3 -6,0 0,4c6,-4 2,-7 0,-4z" fill="#ff5e8a" class="twinkle" '
+                       f'style="animation-delay:{k * .6}s"/>' for k, dx in enumerate((-10, 12)))
+    if mood == "sleeping":
+        out += "".join(f'<text x="{cx + 10 + k * 6}" y="{base - 32 - k * 7}" font-size="{8 + k * 2}" font-weight="800" fill="#8fb3ff" '
+                       f'class="twinkle" style="animation-delay:{k * .5}s">z</text>' for k in range(3))
+    return out
+
+
+PET_LINES = {
+    "happy": "Fed with commits today!",
+    "waiting": "Hungry… push a commit?",
+    "sad": "{days} days without code…",
+    "sleeping": "zzz… wake me with a commit",
+}
+
+
+def contribution_city(user: dict, calendar: dict, weather: dict | None = None) -> str:
+    """Last year of contributions as a 3D city: one building per day, under the sky, weather and
+    festival of the moment in India, with a coding pet that lives on my streak."""
     phase, fest = sky_phase(), festival_today()
     W, H = 850, 270 + (16 if fest in GROUND_FESTIVALS else 0)
     lit, colors = (FESTIVALS[fest][2], FESTIVALS[fest][1]) if fest else (SKIES[phase][3], [AMBER])
@@ -648,24 +794,28 @@ def contribution_city(user: dict, calendar: dict) -> str:
     top = max(peak["count"], 1)
     current, longest = _streaks(days)
 
-    b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase)
+    b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase, strong=True)
     if phase == "night":
         b += stars(380, 60, 450, 60, n=28, seed=4)
     if fest != "eid":  # Eid brings its own crescent
-        b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in ("dawn", "dusk") else 66, phase, r=15)}</g>'
+        b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in LOW_SUN else 66, phase, r=15)}</g>'
+    b += weather_sky(weather, 1, 1, W - 2, 232, seed=calendar["total"])
     if fest:
         b += festival_sky(fest, 370, 66, 450, 90, seed=calendar["total"])
         b += (f'<text x="250" y="118" text-anchor="middle" font-size="20" font-weight="800" fill="url(#og)" '
               f'filter="url(#glow)" class="pop" {d(.5)}>{esc(FESTIVALS[fest][0])}</text>')
     b += heading(24, 20, None, "Contribution City",
                  f"Every building is one day of my last year on GitHub · {calendar['total']:,} contributions")
-    chips = [(str(current), "day streak"), (str(longest), "best streak"), (str(peak["count"]), "best day")]
+    chips = [(str(current), "day streak", AMBER), (str(longest), "best streak", AMBER),
+             (str(peak["count"]), "best day", AMBER)]
+    if weather and weather.get("aqi") is not None:
+        chips.append((str(weather["aqi"]), "AQI now", aqi_color(weather["aqi"])))
     x = W - 24
-    for i, (v, label) in enumerate(reversed(chips)):
-        w = 74
+    for i, (v, label, color) in enumerate(reversed(chips)):
+        w = 70
         x -= w
         b += (f'<g class="pop" {d(.2 + i * .1)}>' + panel(x, 22, w, 38, 8) +
-              f'<text x="{x + w / 2}" y="41" text-anchor="middle" font-size="14" font-weight="800" fill="{AMBER}">{v}</text>'
+              f'<text x="{x + w / 2}" y="41" text-anchor="middle" font-size="14" font-weight="800" fill="{color}">{v}</text>'
               f'<text x="{x + w / 2}" y="53" text-anchor="middle" font-size="8.5" class="muted">{label}</text></g>')
         x -= 8
 
@@ -717,8 +867,32 @@ def contribution_city(user: dict, calendar: dict) -> str:
               f'<text x="{px:.1f}" y="{py - 20:.1f}" text-anchor="middle" font-size="9.5" font-weight="700" fill="{AMBER}">{esc(label)}</text></g>')
     if fest in GROUND_FESTIVALS:
         b += festival_ground(fest, x0, ground + 18, len(weeks) * sx + 30, n=30)
+
+    # the coding pet, on the empty lots at the front left
+    idle = 0
+    for day in reversed(days):
+        if day["count"]:
+            break
+        idle += 1
+    mood = "happy" if idle == 0 else "waiting" if idle == 1 else "sad" if idle < 7 else "sleeping"
+    stage = "egg" if longest < 3 else "chick" if longest < 7 else "bird"
+    px, pbase = x0 + 70, ground - 2
+    line = PET_LINES[mood].format(days=idle)
+    bw_ = len(line) * 5.3 + 18
+    b += (f'<g class="pop" {d(1.6)}>{_pet(px, pbase, stage, mood)}'
+          f'<rect x="{px + 22}" y="{pbase - 66}" width="{bw_:.0f}" height="20" rx="10" fill="#ffffff" fill-opacity=".92"/>'
+          f'<path d="M{px + 30},{pbase - 47}l-6,8 12,-8z" fill="#ffffff" fill-opacity=".92"/>'
+          f'<text x="{px + 22 + bw_ / 2:.0f}" y="{pbase - 52}" text-anchor="middle" font-size="9.5" font-weight="700" '
+          f'fill="#1a0d02">{esc(line)}</text>'
+          f'<text x="{px}" y="{pbase + 14}" text-anchor="middle" font-size="8" class="dim">'
+          f'{esc(config.PET_NAME)} · {stage}</text></g>')
+
     b += synced(24, H - 12, right=False)
-    note = FESTIVALS[fest][0] if fest else "windows light up at night"
+    note = FESTIVALS[fest][0] if fest else ""
+    if weather:
+        note = " · ".join(filter(None, [f'{weather["temp"]}°C, {weather["words"]}',
+                                        f'AQI {weather["aqi"]} {weather["aqi_label"]}' if weather.get("aqi") is not None else "",
+                                        note]))
     b += (f'<text x="826" y="{H - 12}" text-anchor="end" font-size="9.5" class="dim mono fade" {d(1.3)}>'
-          f'{esc(phase_label(phase, user.get("location", "")))} · {esc(note)}</text>')
-    return svg(W, H, b, FESTIVAL_CSS, title="Contribution City")
+          f'{esc(" · ".join(filter(None, [phase_label(phase, user.get("location", "")), note])))}</text>')
+    return svg(W, H, b, FESTIVAL_CSS + WEATHER_CSS, title="Contribution City", light=False)

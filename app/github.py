@@ -179,6 +179,21 @@ async def get_now_building(login: str, repos: dict) -> dict | None:
     return await _cached(f"building:{login}", load)
 
 
+async def get_commit_log(login: str) -> list[dict]:
+    """My 100 most recent commits across public repos, newest first:
+    [{'sha', 'date', 'repo'}]; 'date' keeps the author's own UTC offset, so its hour is local time."""
+
+    async def load():
+        try:
+            raw = await _get("/search/commits", q=f"author:{login}", sort="author-date", order="desc", per_page=100)
+        except GitHubError:
+            return []
+        return [{"sha": i["sha"], "date": i["commit"]["author"]["date"], "repo": i["repository"]["name"]}
+                for i in raw.get("items", [])]
+
+    return await _cached(f"commitlog:{login}", load)
+
+
 def featured(repos: list[dict], count: int = 4) -> list[dict]:
     if config.FEATURED_REPOS:
         by_name = {r["name"].lower(): r for r in repos}
@@ -530,6 +545,46 @@ async def get_festival_dates() -> dict[str, str]:
         return {k: theme for k, (_, theme) in best.items()}
 
     return await _cached("festivals", load)
+
+
+# ------------------------------------------------------------------ weather
+
+# WMO weather code -> (kind drawn on the city, words)
+WEATHER_CODES = [
+    ((0,), "clear", "clear sky"), ((1,), "clear", "mostly clear"), ((2,), "clouds", "partly cloudy"),
+    ((3,), "clouds", "overcast"), ((45, 48), "fog", "foggy"), (tuple(range(51, 58)), "rain", "drizzle"),
+    (tuple(range(61, 68)), "rain", "rain"), (tuple(range(71, 78)), "snow", "snow"),
+    ((80, 81, 82), "rain", "showers"), ((85, 86), "snow", "snow showers"), ((95, 96, 99), "storm", "thunderstorm"),
+]
+AQI_LEVELS = [(50, "good"), (100, "moderate"), (150, "unhealthy for some"), (200, "unhealthy"),
+              (300, "very unhealthy"), (10_000, "hazardous")]
+
+
+async def get_weather() -> dict | None:
+    """Current weather and air quality at config.WEATHER_LAT/LON from Open-Meteo (free, no key):
+    {'temp', 'kind', 'words', 'aqi', 'aqi_label'}; None if it can't be read."""
+
+    async def load():
+        where = {"latitude": config.WEATHER_LAT, "longitude": config.WEATHER_LON, "timezone": "Asia/Kolkata"}
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                wx, air = await asyncio.gather(
+                    client.get("https://api.open-meteo.com/v1/forecast",
+                               params={**where, "current": "temperature_2m,weather_code"}),
+                    client.get("https://air-quality-api.open-meteo.com/v1/air-quality",
+                               params={**where, "current": "us_aqi"}))
+            now, aq = wx.json()["current"], air.json().get("current", {})
+        except (httpx.HTTPError, ValueError, KeyError):
+            return None
+        code = now.get("weather_code", 0)
+        kind, words = next(((k, w) for codes, k, w in WEATHER_CODES if code in codes), ("clouds", "cloudy"))
+        aqi = aq.get("us_aqi")
+        label = next(name for limit, name in AQI_LEVELS if aqi is None or aqi <= limit) if aqi is not None else ""
+        if kind in ("clear", "clouds") and aqi and aqi > 150:
+            kind, words = "smog", "smoggy"
+        return {"temp": round(now.get("temperature_2m", 0)), "kind": kind, "words": words, "aqi": aqi, "aqi_label": label}
+
+    return await _cached("weather", load)
 
 
 # ------------------------------------------------------------------ helpers

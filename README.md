@@ -45,12 +45,13 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/city` | Contribution City: the last year as a 3D city, one building per day, plus streaks and festival themes |
+| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes and Byte, a coding pet that grows with your best streak and sulks when you stop committing |
 | `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
 | `/card/smart-contracts` | Smart Contract Lab: a live `Profile.sol`, Solidity repos and detected Web3 tools |
 | `/card/now-building` | most recently pushed repo, its latest commit and 30-day commit momentum |
+| `/card/coding-dna` | Night Owl / Early Bird clock from commit times, and generative art from the latest commit hashes |
 | `/card/architecture`, `/card/cloud` | most used tools per layer, repos with Docker / GitHub Actions / AWS |
-| `/card/achievements` | stars, commits, PRs, yearly contributions, repos, years on GitHub |
+| `/card/achievements` | milestones plus unlockable badges; from 1 Dec to 7 Jan it becomes your year in review (Wrapped) |
 | `/card/what-i-build`, `/card/backend`, `/card/workflow`, `/card/problem-solution`, `/card/collaborate` | content from `app/config.py` |
 | `/card/heading?title=&subtitle=&n=` | section heading |
 | `/card/button?label=&icon=&primary=` | link buttons (github, linkedin, email, resume) |

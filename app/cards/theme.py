@@ -141,41 +141,45 @@ def ist_now() -> str:
 # Cards re-render every hour, so the sky follows the time of day in India.
 # phase: (sky top, horizon glow, glow opacity, chance a window is lit, sun/moon colour)
 SKIES = {
-    "dawn": ("#1b2140", "#ff9a5a", .30, .15, "#ffb067"),
-    "day": ("#0e2440", "#4a8fd8", .30, .05, "#ffd76a"),
-    "dusk": ("#1c1030", "#ff5e3a", .36, .28, "#ff8c42"),
-    "night": ("#04060c", "#24407a", .32, .42, "#e8ecf5"),
+    "morning": ("#1f3a6e", "#ff9a5a", .30, .12, "#ffb067"),
+    "afternoon": ("#0f3d73", "#5aa7e8", .30, .05, "#ffd76a"),
+    "evening": ("#2b1446", "#ff5e3a", .36, .28, "#ff8c42"),
+    "night": ("#03050b", "#1c3166", .32, .42, "#e8ecf5"),
 }
+LOW_SUN = ("morning", "evening")  # the sun sits near the horizon
 
 
 def sky_phase() -> str:
     h = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).hour
-    if 5 <= h < 8:
-        return "dawn"
-    if 8 <= h < 17:
-        return "day"
+    if 5 <= h < 12:
+        return "morning"
+    if 12 <= h < 17:
+        return "afternoon"
     if 17 <= h < 20:
-        return "dusk"
+        return "evening"
     return "night"
 
 
 def phase_label(phase: str, location: str = "") -> str:
-    word = {"dawn": "sunrise", "day": "daytime", "dusk": "sunset", "night": "night"}[phase]
-    return f"{word} in {location.split(',')[0]}" if location else word
+    return f"{phase} in {location.split(',')[0]}" if location else phase
 
 
-def sky(x, y, w, h, phase: str, rx: int = 14) -> str:
-    """Gradient wash from a clear top to a phase-coloured horizon at the bottom."""
+def sky(x, y, w, h, phase: str, rx: int = 14, strong: bool = False) -> str:
+    """Gradient wash towards a phase-coloured horizon. strong=True paints the whole
+    background in the colours of the time of day (used by Contribution City)."""
     top, horizon, op, _, _ = SKIES[phase]
-    gid = f"sky{x}-{y}-{w}"
-    return (f'<defs><linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1">'
-            f'<stop offset="0" stop-color="{top}" stop-opacity=".0"/>'
-            f'<stop offset="1" stop-color="{horizon}" stop-opacity="{op}"/></linearGradient></defs>'
+    gid = f"sky{x}-{y}-{w}{'s' if strong else ''}"
+    stops = (f'<stop offset="0" stop-color="{top}" stop-opacity=".95"/>'
+             f'<stop offset=".6" stop-color="{top}" stop-opacity=".75"/>'
+             f'<stop offset="1" stop-color="{horizon}" stop-opacity="{min(1, op * 2.4):.2f}"/>' if strong else
+             f'<stop offset="0" stop-color="{top}" stop-opacity=".0"/>'
+             f'<stop offset="1" stop-color="{horizon}" stop-opacity="{op}"/>')
+    return (f'<defs><linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1">{stops}</linearGradient></defs>'
             f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="url(#{gid})"/>')
 
 
 def celestial(cx, cy, phase: str, r: float = 18) -> str:
-    """Sun by day, low orange sun at dawn/dusk, moon at night."""
+    """Sun in the afternoon, low orange sun in the morning/evening, moon at night."""
     color = SKIES[phase][4]
     out = f'<circle cx="{cx}" cy="{cy}" r="{r * 2.2:.0f}" fill="{color}" fill-opacity=".14" filter="url(#softglow)" class="glowpulse"/>'
     if phase == "night":
@@ -184,8 +188,8 @@ def celestial(cx, cy, phase: str, r: float = 18) -> str:
                 f'<circle cx="{cx + r * .35:.1f}" cy="{cy + r * .3:.1f}" r="{r * .15:.1f}" fill="#c3cad8"/>'
                 f'<circle cx="{cx + r * .1:.1f}" cy="{cy - r * .5:.1f}" r="{r * .1:.1f}" fill="#c3cad8"/>')
         return out
-    if phase == "day":
-        rays = "".join(f'<path d="M{cx},{cy - r * 1.35:.1f}v{-r * .45:.1f}" stroke="{color}" stroke-width="2" '
+    if phase == "afternoon":
+        rays ="".join(f'<path d="M{cx},{cy - r * 1.35:.1f}v{-r * .45:.1f}" stroke="{color}" stroke-width="2" '
                        f'stroke-linecap="round" transform="rotate({a} {cx} {cy})"/>' for a in range(0, 360, 45))
         out += f'<g class="spin">{rays}</g>'
     return out + f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" filter="url(#glow)"/>'
@@ -420,6 +424,64 @@ def festival_ground(name: str, x, y, w, n: int = 12) -> str:
     return out
 
 
+# --------------------------------------------------------------- weather
+
+WEATHER_CSS = (
+    "@keyframes rain{from{transform:translate(0,-60px)}to{transform:translate(-18px,260px)}}"
+    ".rain{animation:rain .9s linear infinite}"
+    "@keyframes flash{0%,89%,93%,100%{opacity:0}90%,92%{opacity:.55}}"
+    ".flash{opacity:0;animation:flash 6s linear infinite}"
+    "@keyframes haze{0%,100%{transform:translateX(-30px)}50%{transform:translateX(30px)}}"
+    ".haze{animation:haze 18s ease-in-out infinite}"
+)
+AQI_COLORS = [(50, GREEN), (100, "#d4c62a"), (150, ORANGE), (200, "#ff5e5e"), (300, "#b36bff"), (10_000, "#a0304a")]
+
+
+def aqi_color(aqi: int | None) -> str:
+    return next((c for limit, c in AQI_COLORS if aqi is not None and aqi <= limit), MUTED)
+
+
+def weather_sky(weather: dict | None, x, y, w, h, seed: int = 3) -> str:
+    """Live weather drawn over a sky box: clouds, rain, storm, snow, fog or smog."""
+    import random
+
+    if not weather:
+        return ""
+    rnd = random.Random(seed)
+    kind, aqi = weather["kind"], weather.get("aqi") or 0
+    out = ""
+    if kind in ("clouds", "rain", "storm", "smog", "fog"):
+        shade = "#5b6577" if kind in ("rain", "storm") else "#9aa6b8"
+        for i in range(5 if kind == "clouds" else 7):
+            cx, cy, s = x + rnd.random() * w, y + h * (.27 + rnd.random() * .22), .7 + rnd.random() * .7
+            out += (f'<g class="fly" style="animation-duration:{60 + rnd.random() * 40:.0f}s;animation-delay:{-rnd.random() * 60:.0f}s" '
+                    f'fill="{shade}" fill-opacity="{.28 if kind == "clouds" else .4}">'
+                    f'<ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="{26 * s:.0f}" ry="{9 * s:.0f}"/>'
+                    f'<ellipse cx="{cx - 10 * s:.0f}" cy="{cy - 6 * s:.0f}" rx="{13 * s:.0f}" ry="{9 * s:.0f}"/>'
+                    f'<ellipse cx="{cx + 8 * s:.0f}" cy="{cy - 9 * s:.0f}" rx="{15 * s:.0f}" ry="{11 * s:.0f}"/></g>')
+    if kind in ("rain", "storm"):
+        for _ in range(70):
+            rx_, ry_ = x + rnd.random() * (w + 40), y + rnd.random() * h
+            out += (f'<path d="M{rx_:.0f},{ry_:.0f}l-3,10" stroke="#9ec9ff" stroke-opacity=".55" stroke-width="1.1" class="rain" '
+                    f'style="animation-delay:{-rnd.random():.2f}s;animation-duration:{.7 + rnd.random() * .5:.2f}s"/>')
+    if kind == "storm":
+        out += f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="#dfe8ff" class="flash"/>'
+    if kind == "snow":
+        for _ in range(45):
+            out += (f'<circle cx="{x + rnd.random() * w:.0f}" cy="{y + rnd.random() * h * .3:.0f}" r="{.8 + rnd.random() * 1.6:.1f}" '
+                    f'fill="#ffffff" fill-opacity=".85" class="fall" style="animation-delay:{-rnd.random() * 9:.1f}s"/>')
+    if kind in ("fog", "smog") or aqi > 150:
+        # smog thickens with the AQI; fog is a cool grey, smog a dirty yellow
+        color = "#b8c2cc" if kind == "fog" else "#c2a878"
+        op = .35 if kind == "fog" else min(.42, max(.14, (aqi - 100) / 450))
+        out += f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{color}" fill-opacity="{op * .45:.2f}"/>'
+        for i in range(3):
+            by = y + h * (.35 + i * .22)
+            out += (f'<g class="haze" style="animation-delay:{-i * 5}s"><ellipse cx="{x + w / 2:.0f}" cy="{by:.0f}" rx="{w * .6:.0f}" ry="{h * .09:.0f}" '
+                    f'fill="{color}" fill-opacity="{op:.2f}" filter="url(#softglow)"/></g>')
+    return out
+
+
 def stars(x, y, w, h, n: int = 30, seed: int = 5) -> str:
     import random
 
@@ -435,12 +497,14 @@ def d(sec: float) -> str:
     return f'style="animation-delay:{sec:.2f}s"'
 
 
-def svg(width: int, height: int, body: str, css: str = "", defs: str = "", title: str = "") -> str:
+def svg(width: int, height: int, body: str, css: str = "", defs: str = "", title: str = "",
+        light: bool = True) -> str:
+    """light=False keeps a painted scene (Contribution City) the same in light mode."""
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}" fill="none" role="img" aria-label="{esc(title)}">'
         f"<title>{esc(title)}</title>"
-        f"<style>{BASE_CSS}{css}{LIGHT_CSS}</style><defs>{BASE_DEFS}{defs}</defs>{body}</svg>"
+        f"<style>{BASE_CSS}{css}{LIGHT_CSS if light else ''}</style><defs>{BASE_DEFS}{defs}</defs>{body}</svg>"
     )
 
 

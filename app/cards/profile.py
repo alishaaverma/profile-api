@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from .. import config
 from .. import github as gh
-from .theme import (AMBER, BLUE, BORDER, CARD2, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, MUTED, ORANGE,
+from .theme import (AMBER, BLUE, BORDER, CARD2, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, LOW_SUN, MUTED, ORANGE,
                     SKIES, TEXT, bullet_list, celestial, compact, count_badge, cube, d, dot, esc, festival_ground,
                     festival_sky, festival_today, frame, heading, ist_now, panel, phase_label, sky, sky_phase, skyline, stars, svg,
                     synced, wrap)
@@ -32,7 +32,7 @@ def hero(user: dict) -> str:
     if phase == "night":
         b += stars(412, 10, 130, 200, n=22, seed=11)
     if fest != "eid":  # Eid brings its own crescent
-        b += f'<g class="fade" {d(.4)}>{celestial(482, 150 if phase in ("dawn", "dusk") else 64, phase)}</g>'
+        b += f'<g class="fade" {d(.4)}>{celestial(482, 150 if phase in LOW_SUN else 64, phase)}</g>'
     if fest:
         b += festival_sky(fest, 395, 12, 145, 195, seed=11)
     lit, colors = (FESTIVALS[fest][2], FESTIVALS[fest][1]) if fest else (SKIES[phase][3], None)

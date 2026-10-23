@@ -5,10 +5,12 @@ Architecture, cloud and achievements read live GitHub data; the rest is config t
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 from .. import config
 from .. import github as gh
+from .live import _streaks
 from .theme import (AMBER, BLUE, BORDER, CARD2, GREEN, ORANGE, bullet_list, compact, count_badge, cube, d, esc,
                     flow_line, frame, heading, panel, svg, synced, trunc, wrap)
 
@@ -237,7 +239,53 @@ def problem_solution(n: int = 18) -> str:
 
 # --------------------------------------------------------- achievements
 
-def achievements(user: dict, repos: dict, stats: dict, calendar: dict, n: int = 20) -> str:
+def _calendar_days(calendar: dict) -> list[dict]:
+    return sorted((day for week in calendar["weeks"] for day in week), key=lambda x: x["date"])
+
+
+def _badges(user: dict, repos: dict, stats: dict, calendar: dict, tech: dict) -> list[tuple]:
+    """(name, glyph, colour, progress, target) for every badge; unlocked when progress >= target."""
+    _, longest = _streaks(_calendar_days(calendar))
+    return [
+        ("First Commit", "✦", "#ff8c42", stats["commits"], 1),
+        ("Solidity Dev", "◆", "#8c8cff", gh.tech_count(tech, "Solidity"), 1),
+        ("Week Streak", "7", "#ff6a3d", longest, 7),
+        ("Month Streak", "30", "#ff4d4d", longest, 30),
+        ("Century", "100", "#58a6ff", stats["commits"], 100),
+        ("Polyglot", "</>", "#3fb950", len(repos["languages"]), 5),
+        ("First Star", "★", "#f0b72f", repos["total_stars"], 1),
+        ("Open Sourcer", "PR", "#bc8cff", stats["prs"], 5),
+    ]
+
+
+def _badge_row(badges: list[tuple], y: float, W: int = 850) -> str:
+    out = ""
+    step = (W - 48) / len(badges)
+    for i, (name, glyph, color, have, need) in enumerate(badges):
+        cx = 24 + step * (i + .5)
+        done = have >= need
+        c = color if done else "#4a5566"
+        glow, muted = (' filter="url(#glow)"', "") if done else ("", ' class="muted"')
+        out += f'<g class="pop" {d(1 + i * .08)}>'
+        out += (f'<circle cx="{cx:.0f}" cy="{y + 20}" r="19" fill="{c}" fill-opacity="{.18 if done else .08}" stroke="{c}" '
+                f'stroke-width="1.6"{glow}/>'
+                f'<text x="{cx:.0f}" y="{y + 20 + (5 if len(glyph) == 1 else 4)}" text-anchor="middle" '
+                f'font-size="{14 if len(glyph) == 1 else 10.5}" font-weight="800" fill="{c}">{esc(glyph)}</text>')
+        if not done:  # padlock
+            out += (f'<rect x="{cx + 9:.0f}" y="{y + 29}" width="10" height="8" rx="1.5" fill="#56606c"/>'
+                    f'<path d="M{cx + 11:.0f},{y + 29}v-2.5a3,3 0 0 1 6,0v2.5" stroke="#56606c" stroke-width="1.5"/>')
+        out += f'<text x="{cx:.0f}" y="{y + 54}" text-anchor="middle" font-size="9.5" font-weight="700"{muted}>{esc(name)}</text>'
+        if done:
+            out += f'<text x="{cx:.0f}" y="{y + 67}" text-anchor="middle" font-size="8.5" fill="{GREEN}">✓ unlocked</text>'
+        else:
+            out += (f'<rect x="{cx - 24:.0f}" y="{y + 61}" width="48" height="4" rx="2" fill="#1d2633"/>'
+                    f'<rect x="{cx - 24:.0f}" y="{y + 61}" width="{48 * min(have, need) / need:.0f}" height="4" rx="2" fill="{color}"/>'
+                    f'<text x="{cx:.0f}" y="{y + 76}" text-anchor="middle" font-size="8" class="dim">{min(have, need)} / {need}</text>')
+        out += "</g>"
+    return out
+
+
+def achievements(user: dict, repos: dict, stats: dict, calendar: dict, tech: dict, n: int = 18) -> str:
     created = datetime.fromisoformat(user["created_at"].replace("Z", "+00:00"))
     years = max(1, (datetime.now(timezone.utc) - created).days // 365)
     items = [
@@ -248,8 +296,15 @@ def achievements(user: dict, repos: dict, stats: dict, calendar: dict, n: int = 
         (compact(user["public_repos"]), "Public Repositories", "#ff6a3d"),
         (f"{years}+", "Years on GitHub", "#bc8cff"),
     ]
-    W, H = 850, 190
+    badges = _badges(user, repos, stats, calendar, tech)
+    unlocked = sum(1 for *_, have, need in badges if have >= need)
+    W, H = 850, 292
     b = frame(W, H) + heading(24, 20, n, "GitHub Achievements", "Milestones, synced from my GitHub account")
+    b += f'<line x1="24" y1="186" x2="826" y2="186" stroke="{BORDER}"/>'
+    b += (f'<text x="24" y="204" font-size="11.5" font-weight="700">Badges</text>'
+          f'<text x="80" y="204" font-size="10" class="muted">{unlocked} of {len(badges)} unlocked · '
+          f'locked ones unlock themselves as I hit them</text>')
+    b += _badge_row(badges, 208)
     b += synced(826, 40)
     step = (W - 48) / len(items)
     cy = 104
@@ -268,4 +323,55 @@ def achievements(user: dict, repos: dict, stats: dict, calendar: dict, n: int = 
         for j, line in enumerate(wrap(label, 16, 2)):
             b += f'<text x="{cx:.0f}" y="{cy + 48 + j * 13}" text-anchor="middle" font-size="10.5" font-weight="600" class="rise" {d(.4 + i * .12)}>{esc(line)}</text>'
     return svg(W, H, b, title="GitHub Achievements")
+
+
+# -------------------------------------------------------- year in review
+
+def wrapped_season() -> bool:
+    """1 Dec - 7 Jan (India time): the achievements card turns into the year in review."""
+    today = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).date()
+    return today.month == 12 or (today.month == 1 and today.day <= 7)
+
+
+def year_in_review(user: dict, repos: dict, stats: dict, calendar: dict, tech: dict, n: int = 18) -> str:
+    today = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).date()
+    year = str(today.year if today.month == 12 else today.year - 1)
+    days = [day for day in _calendar_days(calendar) if day["date"].startswith(year)]
+    total = sum(day["count"] for day in days)
+    months = Counter()
+    for day in days:
+        months[day["date"][5:7]] += day["count"]
+    busiest = datetime.strptime(max(months, key=months.get), "%m").strftime("%B") if total else "—"
+    _, longest = _streaks(days)
+    best = max(days, key=lambda x: x["count"]) if total else None
+    new_repos = [r for r in repos["repos"] if (r.get("created_at") or "").startswith(year)]
+    before = {r["language"] for r in repos["repos"] if r["language"] and (r.get("created_at") or "") < year}
+    new_langs = sorted({r["language"] for r in new_repos if r["language"]} - before)
+    top_repo = stats["top_repos"][0][0] if stats["top_repos"] else "—"
+
+    W, H = 850, 292
+    b = frame(W, H)
+    import random
+    rnd = random.Random(int(year))
+    for _ in range(40):  # confetti
+        b += (f'<rect x="{rnd.random() * W:.0f}" y="{rnd.random() * H:.0f}" width="4" height="7" rx="1" '
+              f'fill="{rnd.choice([ORANGE, AMBER, GREEN, BLUE, "#bc8cff", "#ff4fa3"])}" fill-opacity=".5" '
+              f'transform="rotate({rnd.randint(0, 90)} {rnd.random() * W:.0f} {rnd.random() * H:.0f})" class="twinkle" '
+              f'style="animation-delay:{rnd.random() * 3:.1f}s"/>')
+    b += heading(24, 20, n, f"My {year} Wrapped", "My year on GitHub, in review")
+    b += (f'<text x="826" y="54" text-anchor="end" font-size="40" font-weight="900" fill="url(#og)" filter="url(#glow)" '
+          f'class="pop" {d(.2)}>{year}</text>')
+    tiles = [(f"{total:,}", "contributions"), (busiest, "busiest month"), (f"{longest} days", "longest streak"),
+             (str(best["count"]) if best else "0", f"best day · {datetime.strptime(best['date'], '%Y-%m-%d'):%d %b}" if best else "best day"),
+             (str(len(new_repos)), "new repositories"), (trunc(top_repo, 16), "most commits went to"),
+             (", ".join(new_langs[:3]) or "—", "new languages"), (str(stats["prs"]), "pull requests")]
+    for i, (value, label) in enumerate(tiles):
+        col, row = i % 4, i // 4
+        x, y = 24 + col * 202, 80 + row * 100
+        b += (f'<g class="rise" {d(.3 + i * .1)}>' + panel(x, y, 194, 88, 10) +
+              f'<text x="{x + 16}" y="{y + 44}" font-size="{22 if len(value) <= 10 else 15}" font-weight="800" fill="url(#og)">{esc(value)}</text>'
+              f'<text x="{x + 16}" y="{y + 68}" font-size="10.5" class="muted">{esc(label)}</text></g>')
+    b += synced(24, H - 10, right=False)
+    b += f'<text x="826" y="{H - 10}" text-anchor="end" font-size="9.5" class="dim">back to achievements on 8 January</text>'
+    return svg(W, H, b, title=f"{year} Wrapped")
 

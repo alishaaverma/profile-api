@@ -68,9 +68,10 @@ async def card_about(username: str | None = None, n: int = 2):
 async def card_city(username: str | None = None):
     async def f():
         login = _user(username)
-        user, cal, festivals = await asyncio.gather(gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates())
+        user, cal, festivals, weather = await asyncio.gather(
+            gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates(), gh.get_weather())
         set_festival_dates(festivals)
-        return live.contribution_city(user, cal)
+        return live.contribution_city(user, cal, weather)
     return await _render(f)
 
 
@@ -192,12 +193,20 @@ async def card_devos(username: str | None = None, n: int = 19):
 
 
 @app.get("/card/achievements")
-async def card_achievements(username: str | None = None, n: int = 20):
+async def card_achievements(username: str | None = None, n: int = 18):
     async def f():
         login = _user(username)
-        user, repos, stats, cal = await asyncio.gather(
-            gh.get_user(login), gh.get_repos(login), gh.get_stats(login), gh.get_calendar(login))
-        return eng.achievements(user, repos, stats, cal, n)
+        user, repos, stats, cal, tech = await asyncio.gather(
+            gh.get_user(login), gh.get_repos(login), gh.get_stats(login), gh.get_calendar(login), gh.get_tech(login))
+        card = eng.year_in_review if eng.wrapped_season() else eng.achievements
+        return card(user, repos, stats, cal, tech, n)
+    return await _render(f)
+
+
+@app.get("/card/coding-dna")
+async def card_coding_dna(username: str | None = None, n: int = 8):
+    async def f():
+        return live.coding_dna(await gh.get_commit_log(_user(username)), n)
     return await _render(f)
 
 
@@ -288,7 +297,7 @@ async def health():
 # ------------------------------------------------------------- preview
 
 PREVIEW_CARDS = ["hero", "city", "about", "tech-stack", "smart-contracts", "what-i-build", "project/0", "project/1", "project/2", "project/3",
-                 "now-building", "architecture", "timeline", "analytics", "activity", "playground", "cloud",
+                 "now-building", "coding-dna", "architecture", "timeline", "analytics", "activity", "playground", "cloud",
                  "achievements", "collaborate"]
 
 

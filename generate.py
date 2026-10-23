@@ -34,9 +34,9 @@ BUTTONS = {
 
 
 async def render(login: str) -> tuple[dict[str, str], list[dict]]:
-    user, repos, events, stats, cal, tech, festivals = await asyncio.gather(
+    user, repos, events, stats, cal, tech, festivals, weather, commits = await asyncio.gather(
         gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login),
-        gh.get_tech(login), gh.get_festival_dates())
+        gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login))
     set_festival_dates(festivals)
     top = gh.featured(repos["repos"], 4)
     building = await gh.get_now_building(login, repos)
@@ -44,7 +44,7 @@ async def render(login: str) -> tuple[dict[str, str], list[dict]]:
     # Section numbers follow the order of the cards in the profile README.
     cards = {
         "hero": prof.hero(user),
-        "city": live.contribution_city(user, cal),
+        "city": live.contribution_city(user, cal, weather),
         "about": prof.about(user, 2),
         "tech-stack": prof.tech_stack(tech, 3),
         "smart-contracts": live.smart_contract_lab(user, repos, tech, 4),
@@ -54,14 +54,17 @@ async def render(login: str) -> tuple[dict[str, str], list[dict]]:
                                                     "updated": "My most recently updated repositories, live from GitHub"}
                                                    .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 6),
         "now-building": live.now_building(building, 7),
-        "architecture": eng.architecture(tech, 8),
-        "timeline": live.timeline_opensource(user, repos, stats, cal, 9),
-        "analytics": live.analytics_exploring(user, stats, cal, 11),
-        "activity": live.activity_terminal(user, repos, events, 13),
-        "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos", 15),
-        "cloud": eng.cloud_deploy(tech, 16),
-        "achievements": eng.achievements(user, repos, stats, cal, 17),
-        "collaborate": prof.collaborate(user, 18),
+        "coding-dna": live.coding_dna(commits, 8),
+        "architecture": eng.architecture(tech, 9),
+        "timeline": live.timeline_opensource(user, repos, stats, cal, 10),
+        "analytics": live.analytics_exploring(user, stats, cal, 12),
+        "activity": live.activity_terminal(user, repos, events, 14),
+        "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos", 16),
+        "cloud": eng.cloud_deploy(tech, 17),
+        # 1 Dec - 7 Jan: the year in review takes the achievements slot
+        "achievements": (eng.year_in_review(user, repos, stats, cal, tech, 18) if eng.wrapped_season()
+                         else eng.achievements(user, repos, stats, cal, tech, 18)),
+        "collaborate": prof.collaborate(user, 19),
     }
     for i in range(4):
         cards[f"project-{i}"] = live.project_card(top[i] if i < len(top) else None, i, login)
