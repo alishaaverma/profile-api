@@ -3,10 +3,9 @@ name: Profile cards
 # Renders the animated SVG cards from live GitHub data and publishes them to the
 # `output` branch of the profile repo, where README.md loads them from.
 on:
-  schedule:
-    # every hour at hh:01 IST (cron is UTC; IST = UTC+5:30), so the greeting and sky catch up
-    # within the hour of sunrise / sunset. Off the busy :00 UTC slot, where GitHub delays runs most.
-    - cron: "31 * * * *"
+  # Every hour: the profile repo's "Refresh profile cards" workflow checks four times an hour and
+  # dispatches this one when the hour's cards aren't out yet (a cron here alone often ran late or
+  # not at all), so the greeting and sky catch up within the hour of sunrise / sunset.
   workflow_dispatch:
   push:
     branches: [main]
@@ -16,7 +15,7 @@ permissions:
 
 concurrency:
   group: profile-cards
-  cancel-in-progress: true
+  cancel-in-progress: false # a dispatch that arrives mid-render waits instead of killing it
 
 env:
   PROFILE_REPO: alishaaverma/alishaaverma
