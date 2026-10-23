@@ -14,9 +14,9 @@ from .. import config
 from .. import github as gh
 from ..github import featured, lang_color, time_ago
 from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, LOW_SUN,
-                    MUTED, ORANGE, SKIES, TEXT, WEATHER_CSS, aqi_color, celestial, compact, d, dot, esc,
+                    MUTED, ORANGE, SKIES, SUN, TEXT, WEATHER_CSS, aqi_color, celestial, compact, d, dot, esc,
                     festival_ground, festival_sky, festival_today, frame, heading, panel, weather_sky,
-                    phase_label, sky, sky_phase, stars, svg, synced, trunc, wrap)
+                    moon_emoji, phase_label, sky, sky_phase, stars, svg, synced, tithi, trunc, wrap)
 
 STAR = "M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
 FORK = "M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"
@@ -971,6 +971,40 @@ def _traffic(n: int, x0: float, x1: float, road_y: float, night: bool) -> str:
     return out
 
 
+def _week_tower(weeks: list[list[dict]], x: float, base: float) -> str:
+    """A landmark tower behind the city for this week (Sunday to today): one lit floor per contribution,
+    as tall as the week is compared with my busiest week, with a sign comparing it to last week."""
+    if not weeks:
+        return ""
+    sums = [sum(day["count"] for day in week) for week in weeks]
+    now, last = sums[-1], (sums[-2] if len(sums) > 1 else 0)
+    w, side, h = 22, 6, 26 + 74 * (now / max(max(sums), 1)) ** .5
+    top = base - h
+    o = (f'<title>{now} contributions this week · {last} last week</title>'
+         f'<rect x="{x:.1f}" y="{top:.1f}" width="{w}" height="{h:.1f}" fill="#2a1a0c" stroke="{AMBER}" stroke-opacity=".5"/>'
+         f'<polygon points="{x + w:.1f},{top:.1f} {x + w + side:.1f},{top - side:.1f} {x + w + side:.1f},{base - side:.1f} '
+         f'{x + w:.1f},{base:.1f}" fill="#1a1109"/>'
+         f'<polygon points="{x:.1f},{top:.1f} {x + side:.1f},{top - side:.1f} {x + w + side:.1f},{top - side:.1f} {x + w:.1f},{top:.1f}" '
+         f'fill="#6b3615"/>'
+         f'<circle cx="{x + w / 2 + side / 2:.1f}" cy="{top - side / 2:.1f}" r="2.2" fill="#ff4d4d" class="pulse" filter="url(#glow)"/>')
+    # one floor per contribution, stacked from the ground up (floors get thinner in a busy week)
+    floors = min(now, 40)
+    fh = (h - 6) / max(floors, 1)
+    for i in range(floors):
+        fy = base - 3 - (i + 1) * fh
+        o += (f'<rect x="{x + 3:.1f}" y="{fy + fh * .2:.1f}" width="{w - 6}" height="{max(fh * .6, .8):.1f}" fill="#ffd76a" '
+              f'class="twinkle" style="animation-delay:{i * .15:.2f}s;animation-duration:{3 + i % 4}s"/>')
+    trend = "▲" if now > last else "▼" if now < last else "="
+    color = GREEN if now >= last else "#ff7b72"
+    o += (f'<text x="{x + w + side:.1f}" y="{top - 28:.1f}" text-anchor="end" font-size="13" font-weight="800" fill="{AMBER}" '
+          f'filter="url(#glow)">{now}</text>'
+          f'<text x="{x + w + side:.1f}" y="{top - 20:.1f}" text-anchor="end" font-size="6.5" font-weight="700" '
+          f'fill="#e6edf3" letter-spacing=".5">THIS WEEK</text>'
+          f'<text x="{x + w + side:.1f}" y="{top - 11:.1f}" text-anchor="end" font-size="7" font-weight="700" fill="{color}">'
+          f'{trend} {abs(now - last)} vs last wk</text>')
+    return f'<g class="growy" {d(.4)}>{o}</g>'
+
+
 def _diary(user: dict, days: list[dict], idle: int, weather: dict | None, fest: str | None, fed_by: str,
            building: dict | None, phase: str) -> str:
     """Byte's one-line diary for today, written from the live data."""
@@ -1023,7 +1057,7 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
     b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase, strong=True)
     if phase == "night":
         b += stars(60, 66, 380, 50, n=14, seed=4)
-        b += _constellations(repos, 520, 70, 310, 44)
+        b += _constellations(repos, 520, 70, 260, 44)
     if fest != "eid":  # Eid brings its own crescent
         b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in LOW_SUN else 66, phase, r=15)}</g>'
     b += weather_sky(weather, 1, 1, W - 2, 232, seed=calendar["total"])
@@ -1061,6 +1095,7 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
             rx_, ry_ = x0 + wr.random() * len(weeks) * sx, ground - wr.random() * 6 * step
             b += (f'<ellipse cx="{rx_ + (ground - ry_):.0f}" cy="{ry_:.0f}" rx="5" ry="1.6" stroke="#9ec9ff" stroke-opacity=".6" '
                   f'class="pulse" style="animation-delay:{wr.random() * 2:.1f}s"/>')
+    b += _week_tower(weeks, x0 + len(weeks) * sx + 6 * step + 14, ground - 6 * step - 4)
     rnd = random.Random(calendar["total"])
     today = days[-1]["date"] if days else ""
     roofs = []  # (x, top, height) of every building
@@ -1166,6 +1201,7 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
         note = " · ".join(filter(None, [f'{weather["temp"]}°C, {weather["words"]}',
                                         f'AQI {weather["aqi"]} {weather["aqi_label"]}' if weather.get("aqi") is not None else "",
                                         note]))
+    panchang = f'☀ {SUN["sunrise"]}–{SUN["sunset"]} · {moon_emoji()} {tithi()}'
     b += (f'<text x="826" y="{H - 12}" text-anchor="end" font-size="9.5" class="dim mono fade" {d(1.3)}>'
-          f'{esc(" · ".join(filter(None, [phase_label(phase, user.get("location", "")), note])))}</text>')
+          f'{esc(" · ".join(filter(None, [phase_label(phase, user.get("location", "")), note, panchang])))}</text>')
     return svg(W, H, b, FESTIVAL_CSS + WEATHER_CSS, title="Contribution City", light=False)

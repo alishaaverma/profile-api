@@ -133,7 +133,7 @@ def hero(user: dict, ctx: dict | None = None) -> str:
     first, _, rest = user["name"].partition(" ")
     name = (f'<tspan>{esc(first)} </tspan><tspan fill="url(#og)">{esc(rest)}</tspan>' if rest
             else f'<tspan fill="url(#og)">{esc(first)}</tspan>')
-    # IST: morning 5-12, afternoon 12-17, evening 17-20, night otherwise
+    # follows the real sun in Noida (theme.sky_phase)
     greeting = {"morning": "Shubh Prabhat ☀", "afternoon": "Shubh Dopahar 🌤", "evening": "Shubh Sandhya 🪔",
                 "night": "Shubh Ratri 🌙"}[phase]
     b += f'<text x="34" y="56" font-size="17" class="muted rise">Namaste 🙏 · {greeting} — I\'m</text>'

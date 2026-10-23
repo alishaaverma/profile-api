@@ -4,8 +4,8 @@ name: Profile cards
 # `output` branch of the profile repo, where README.md loads them from.
 on:
   schedule:
-    # every hour at hh:01 IST (cron is UTC; IST = UTC+5:30), so the greeting and sky switch
-    # right after 5, 12, 17 and 20 IST. Off the busy :00 UTC slot, where GitHub delays runs most.
+    # every hour at hh:01 IST (cron is UTC; IST = UTC+5:30), so the greeting and sky catch up
+    # within the hour of sunrise / sunset. Off the busy :00 UTC slot, where GitHub delays runs most.
     - cron: "31 * * * *"
   workflow_dispatch:
   push:

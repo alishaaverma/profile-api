@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import math
+import re
 import textwrap
 from datetime import datetime, timedelta, timezone
 
@@ -138,7 +139,7 @@ def ist_now() -> str:
 
 # ------------------------------------------------------------ day / night
 
-# Cards re-render every hour, so the sky follows the time of day in India.
+# Cards re-render every hour, so the sky follows the sun in India.
 # phase: (sky top, horizon glow, glow opacity, chance a window is lit, sun/moon colour)
 SKIES = {
     "morning": ("#1f3a6e", "#ff9a5a", .30, .12, "#ffb067"),
@@ -149,15 +150,82 @@ SKIES = {
 LOW_SUN = ("morning", "evening")  # the sun sits near the horizon
 
 
+# Today's sunrise / sunset in Noida ("HH:MM" IST), filled from the weather with set_sun_times().
+# The defaults are a typical day, used when the weather can't be read.
+SUN = {"sunrise": "06:15", "sunset": "17:45"}
+
+
+def set_sun_times(weather: dict | None) -> None:
+    for k in SUN:
+        if weather and re.fullmatch(r"\d\d:\d\d", weather.get(k) or ""):
+            SUN[k] = weather[k]
+
+
+def _minutes(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
 def sky_phase() -> str:
-    h = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).hour
-    if 5 <= h < 12:
+    """Follows the real sun: morning from 45 min before sunrise to noon, evening from 45 min
+    before sunset to 75 min after it (the sky glows orange), night otherwise."""
+    now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    t, rise, sset = now.hour * 60 + now.minute, _minutes(SUN["sunrise"]), _minutes(SUN["sunset"])
+    if rise - 45 <= t < 12 * 60:
         return "morning"
-    if 12 <= h < 17:
+    if 12 * 60 <= t < sset - 45:
         return "afternoon"
-    if 17 <= h < 20:
+    if sset - 45 <= t < sset + 75:
         return "evening"
     return "night"
+
+
+# ------------------------------------------------------------- the moon
+
+TITHIS = ["Pratipada", "Dwitiya", "Tritiya", "Chaturthi", "Panchami", "Shashthi", "Saptami", "Ashtami",
+          "Navami", "Dashami", "Ekadashi", "Dwadashi", "Trayodashi", "Chaturdashi"]
+
+
+def moon_elongation(when: datetime | None = None) -> float:
+    """Degrees the moon is ahead of the sun (0 = new moon, 180 = full moon), from the low-precision
+    formulas of the Astronomical Almanac: good to about a degree, i.e. a couple of hours of a tithi."""
+    n = ((when or datetime.now(timezone.utc)) - datetime(2000, 1, 1, 12, tzinfo=timezone.utc)).total_seconds() / 86400
+    rad = math.radians
+    g = rad(357.528 + .9856003 * n)
+    sun = 280.46 + .9856474 * n + 1.915 * math.sin(g) + .020 * math.sin(2 * g)
+    lm, mm = 218.316 + 13.176396 * n, rad(134.963 + 13.064993 * n)
+    dd = rad(lm - (280.46 + .9856474 * n))
+    moon = lm + 6.289 * math.sin(mm) + 1.274 * math.sin(2 * dd - mm) + .658 * math.sin(2 * dd) - .186 * math.sin(g)
+    return (moon - sun) % 360
+
+
+def tithi(when: datetime | None = None) -> str:
+    """The lunar day of the Hindu calendar: 30 per month, one for every 12 degrees of elongation."""
+    i = int(moon_elongation(when) // 12)
+    if i == 14:
+        return "Purnima"
+    if i == 29:
+        return "Amavasya"
+    return f"{'Shukla' if i < 15 else 'Krishna'} {TITHIS[i % 15]}"
+
+
+def moon_emoji(when: datetime | None = None) -> str:
+    return "🌑🌒🌓🌔🌕🌖🌗🌘"[int((moon_elongation(when) + 22.5) % 360 // 45)]
+
+
+def moon_shape(cx, cy, r, color: str) -> str:
+    """Tonight's moon: the lit part as a path (outer half-circle + elliptical terminator)."""
+    e = moon_elongation()
+    k = math.cos(math.radians(e))  # 1 new, 0 half, -1 full
+    out = f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="#2a3142" fill-opacity=".85"/>'
+    if abs(k) > .985 and k > 0:  # new moon: only the dark disc
+        return out
+    waxing = e < 180  # lit on the right
+    outer = 1 if waxing else 0
+    term = (0 if waxing else 1) if k > 0 else (1 if waxing else 0)
+    out += (f'<path d="M{cx},{cy - r} A{r},{r} 0 0 {outer} {cx},{cy + r} A{abs(k) * r:.2f},{r} 0 0 {term} {cx},{cy - r}z" '
+            f'fill="{color}" filter="url(#glow)"/>')
+    return out
 
 
 def phase_label(phase: str, location: str = "") -> str:
@@ -182,15 +250,11 @@ def sky(x, y, w, h, phase: str, rx: int = 14, strong: bool = False) -> str:
 
 
 def celestial(cx, cy, phase: str, r: float = 18) -> str:
-    """Sun in the afternoon, low orange sun in the morning/evening, moon at night."""
+    """Sun in the afternoon, low orange sun in the morning/evening, tonight's real moon phase at night."""
     color = SKIES[phase][4]
     out = f'<circle cx="{cx}" cy="{cy}" r="{r * 2.2:.0f}" fill="{color}" fill-opacity=".14" filter="url(#softglow)" class="glowpulse"/>'
     if phase == "night":
-        out += (f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" filter="url(#glow)"/>'
-                f'<circle cx="{cx - r * .3:.1f}" cy="{cy - r * .2:.1f}" r="{r * .22:.1f}" fill="#c3cad8"/>'
-                f'<circle cx="{cx + r * .35:.1f}" cy="{cy + r * .3:.1f}" r="{r * .15:.1f}" fill="#c3cad8"/>'
-                f'<circle cx="{cx + r * .1:.1f}" cy="{cy - r * .5:.1f}" r="{r * .1:.1f}" fill="#c3cad8"/>')
-        return out
+        return out + moon_shape(cx, cy, r, color)
     if phase == "afternoon":
         rays ="".join(f'<path d="M{cx},{cy - r * 1.35:.1f}v{-r * .45:.1f}" stroke="{color}" stroke-width="2" '
                        f'stroke-linecap="round" transform="rotate({a} {cx} {cy})"/>' for a in range(0, 360, 45))

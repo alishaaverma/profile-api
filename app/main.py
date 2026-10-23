@@ -12,9 +12,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from . import config
 from . import github as gh
 from .cards import engineering as eng
-from .cards import live
+from .cards import desi, live
 from .cards import profile as prof
-from .cards.theme import ORANGE, esc, frame, set_festival_dates, svg
+from .cards.theme import ORANGE, esc, frame, set_festival_dates, set_sun_times, svg
 
 app = FastAPI(title="GitHub Profile API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
@@ -59,8 +59,10 @@ async def _context(login: str) -> tuple[dict, dict]:
 @app.get("/card/hero")
 async def card_hero(username: str | None = None):
     async def f():
-        (user, ctx), festivals = await asyncio.gather(_context(_user(username)), gh.get_festival_dates())
+        (user, ctx), festivals, weather = await asyncio.gather(_context(_user(username)), gh.get_festival_dates(),
+                                                              gh.get_weather())
         set_festival_dates(festivals)
+        set_sun_times(weather)
         return prof.hero(user, ctx)
     return await _render(f)
 
@@ -81,6 +83,7 @@ async def card_city(username: str | None = None):
             gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates(), gh.get_weather(),
             gh.get_byte_feeds(login), gh.get_repos(login))
         set_festival_dates(festivals)
+        set_sun_times(weather)
         building = await gh.get_now_building(login, repos)
         return live.contribution_city(user, cal, weather, feeds, repos, building)
     return await _render(f)
@@ -243,6 +246,32 @@ async def card_achievements(username: str | None = None, n: int = 18):
 async def card_coding_dna(username: str | None = None, n: int = 8):
     async def f():
         return live.coding_dna(await gh.get_commit_log(_user(username)), n)
+    return await _render(f)
+
+
+@app.get("/card/thali")
+async def card_thali(username: str | None = None):
+    async def f():
+        login = _user(username)
+        tech, repos = await asyncio.gather(gh.get_tech(login), gh.get_repos(login))
+        return desi.tech_thali(tech, repos)
+    return await _render(f)
+
+
+@app.get("/card/desi-corner")
+async def card_desi_corner(username: str | None = None):
+    async def f():
+        login = _user(username)
+        user, cal, commits, repos = await asyncio.gather(
+            gh.get_user(login), gh.get_calendar(login), gh.get_commit_log(login), gh.get_repos(login))
+        return desi.desi_corner(user, cal, commits, repos)
+    return await _render(f)
+
+
+@app.get("/card/rajdhani")
+async def card_rajdhani(username: str | None = None):
+    async def f():
+        return desi.rajdhani(await gh.get_repos(_user(username)))
     return await _render(f)
 
 

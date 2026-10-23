@@ -21,9 +21,9 @@ from pathlib import Path
 from app import config
 from app import github as gh
 from app.cards import engineering as eng
-from app.cards import live
+from app.cards import desi, live
 from app.cards import profile as prof
-from app.cards.theme import set_festival_dates
+from app.cards.theme import set_festival_dates, set_sun_times
 
 BUTTONS = {
     "button-view-my-work": ("View My Work", "github", True),
@@ -47,6 +47,7 @@ async def render(login: str) -> tuple[dict[str, str], list[dict], dict, list[dic
         gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login), gh.get_til(login),
         gh.get_byte_feeds(login), gh.get_ideas(login), gh.get_ama(login), gh.get_socials(login))
     set_festival_dates(festivals)
+    set_sun_times(weather)
     top = gh.featured(repos["repos"], 4)
     building = await gh.get_now_building(login, repos)
     ctx = prof.context(user, repos, tech, cal, building, til)
@@ -64,6 +65,9 @@ async def render(login: str) -> tuple[dict[str, str], list[dict], dict, list[dic
                                                    .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 4),
         "now-building": live.now_building(building, 5),
         "coding-dna": live.coding_dna(commits, 6),
+        "thali": desi.tech_thali(tech, repos),
+        "desi-corner": desi.desi_corner(user, cal, commits, repos),
+        "rajdhani": desi.rajdhani(repos),
         "community": live.community(ideas, ama, 7),
         # the rest sits under "Explore more about me" in the profile README
         "tech-stack": prof.tech_stack(tech, 9),

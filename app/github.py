@@ -198,14 +198,15 @@ async def get_now_building(login: str, repos: dict) -> dict | None:
 
 async def get_commit_log(login: str) -> list[dict]:
     """My 100 most recent commits across public repos, newest first:
-    [{'sha', 'date', 'repo'}]; 'date' keeps the author's own UTC offset, so its hour is local time."""
+    [{'sha', 'date', 'repo', 'message'}]; 'date' keeps the author's own UTC offset, so its hour is local time."""
 
     async def load():
         try:
             raw = await _get("/search/commits", q=f"author:{login}", sort="author-date", order="desc", per_page=100)
         except GitHubError:
             return []
-        return [{"sha": i["sha"], "date": i["commit"]["author"]["date"], "repo": i["repository"]["name"]}
+        return [{"sha": i["sha"], "date": i["commit"]["author"]["date"], "repo": i["repository"]["name"],
+                 "message": (i["commit"]["message"] or "").partition("\n")[0]}
                 for i in raw.get("items", [])]
 
     return await _cached(f"commitlog:{login}", load)
@@ -407,7 +408,7 @@ query($login: String!) {
         description
         isArchived
         repositoryTopics(first: 20) { nodes { topic { name } } }
-        languages(first: 10) { nodes { name } }
+        languages(first: 10) { edges { size node { name } } }
         dockerfile: object(expression: "HEAD:Dockerfile") { __typename }
         workflows: object(expression: "HEAD:.github/workflows") { __typename }
         packageJson: object(expression: "HEAD:package.json") { ... on Blob { text } }
@@ -445,7 +446,8 @@ def _pip_deps(blob: dict | None) -> set[str]:
 
 
 async def get_tech(login: str) -> dict:
-    """{'repos': {name: {tokens}}, 'languages': Counter(language -> repo count)}
+    """{'repos': {name: {tokens}}, 'languages': Counter(language -> repo count),
+        'bytes': Counter(language -> bytes of code), 'exact': whether 'bytes' is real bytes}
 
     Tokens are what a repo shows about the tech it uses; match them against
     config.TECH_ALIASES with tech_count(). With a GITHUB_TOKEN, one GraphQL call
@@ -454,13 +456,14 @@ async def get_tech(login: str) -> dict:
     """
 
     async def load():
-        repos, langs = {}, Counter()
+        repos, langs, sizes = {}, Counter(), Counter()
         if config.GITHUB_TOKEN:
             nodes = (await _graphql(TECH_QUERY, login=login))["user"]["repositories"]["nodes"]
             for r in nodes:
                 if r["isArchived"] or r["name"].lower() == login.lower():
                     continue
-                names = [l["name"] for l in r["languages"]["nodes"]]
+                names = [e["node"]["name"] for e in r["languages"]["edges"]]
+                sizes.update({e["node"]["name"]: e["size"] for e in r["languages"]["edges"]})
                 tokens = {n.lower() for n in names} | {t["topic"]["name"] for t in r["repositoryTopics"]["nodes"]}
                 tokens |= _words(r["name"].replace("-", " ").replace("_", " ")) | _words(r["description"])
                 tokens |= _npm_deps(r["packageJson"]) | _pip_deps(r["requirements"])
@@ -477,7 +480,8 @@ async def get_tech(login: str) -> dict:
                     tokens.add(r["language"].lower())
                     langs[r["language"]] += 1
                 repos[r["name"]] = tokens
-        return {"repos": repos, "languages": langs}
+            sizes = langs.copy()  # no token: weigh each language by its repos instead
+        return {"repos": repos, "languages": langs, "bytes": sizes, "exact": bool(config.GITHUB_TOKEN)}
 
     return await _cached(f"tech:{login}", load)
 
@@ -677,7 +681,8 @@ AQI_LEVELS = [(50, "good"), (100, "moderate"), (150, "unhealthy for some"), (200
 
 async def get_weather() -> dict | None:
     """Current weather and air quality at config.WEATHER_LAT/LON from Open-Meteo (free, no key):
-    {'temp', 'kind', 'words', 'aqi', 'aqi_label'}; None if it can't be read."""
+    {'temp', 'kind', 'words', 'aqi', 'aqi_label', 'sunrise', 'sunset'} (times as "HH:MM" IST);
+    None if it can't be read."""
 
     async def load():
         where = {"latitude": config.WEATHER_LAT, "longitude": config.WEATHER_LON, "timezone": "Asia/Kolkata"}
@@ -685,10 +690,11 @@ async def get_weather() -> dict | None:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 wx, air = await asyncio.gather(
                     client.get("https://api.open-meteo.com/v1/forecast",
-                               params={**where, "current": "temperature_2m,weather_code,precipitation"}),
+                               params={**where, "current": "temperature_2m,weather_code,precipitation",
+                                       "daily": "sunrise,sunset", "forecast_days": 1}),
                     client.get("https://air-quality-api.open-meteo.com/v1/air-quality",
                                params={**where, "current": "us_aqi"}))
-            now, aq = wx.json()["current"], air.json().get("current", {})
+            now, aq, daily = wx.json()["current"], air.json().get("current", {}), wx.json().get("daily", {})
         except (httpx.HTTPError, ValueError, KeyError):
             return None
         code = now.get("weather_code", 0)
@@ -700,7 +706,9 @@ async def get_weather() -> dict | None:
         label = next(name for limit, name in AQI_LEVELS if aqi is None or aqi <= limit) if aqi is not None else ""
         if kind in ("clear", "clouds") and aqi and aqi > 150:
             kind, words = "smog", "smoggy"
-        return {"temp": round(now.get("temperature_2m", 0)), "kind": kind, "words": words, "aqi": aqi, "aqi_label": label}
+        sun = {k: (daily.get(k) or [""])[0][11:16] for k in ("sunrise", "sunset")}
+        return {"temp": round(now.get("temperature_2m", 0)), "kind": kind, "words": words, "aqi": aqi, "aqi_label": label,
+                **sun}
 
     return await _cached("weather", load)
 
