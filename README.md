@@ -45,7 +45,9 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
+| `/card/city` | Contribution City: the last year as a 3D city, one building per day, plus streaks |
 | `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
+| `/card/smart-contracts` | Smart Contract Lab: a live `Profile.sol`, Solidity repos and detected Web3 tools |
 | `/card/architecture`, `/card/cloud` | most used tools per layer, repos with Docker / GitHub Actions / AWS |
 | `/card/achievements` | stars, commits, PRs, yearly contributions, repos, years on GitHub |
 | `/card/what-i-build`, `/card/backend`, `/card/workflow`, `/card/problem-solution`, `/card/collaborate` | content from `app/config.py` |
@@ -53,6 +55,9 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/button?label=&icon=&primary=` | link buttons (github, linkedin, email, resume) |
 
 Every card accepts `?username=` and `?n=` (the section number).
+
+The hero, city and collaborate cards follow the time of day in India (sunrise, daytime, sunset, night):
+the sky, sun or moon and the number of lit windows change with each hourly render.
 
 JSON: `/api/profile`, `/api/projects`, `/api/github/stats`, `/api/activity`, `/api/experience`, `/api/tech-stack`, `/health`.
 

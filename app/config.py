@@ -34,6 +34,7 @@ PROFILE = {
     "years_experience": None,
     "available": True,
     "chips": ["Frontend", "Backend", "APIs", "Databases", "Cloud", "Web3"],
+    "highlight_chips": ["Web3"],  # glow in the Solidity purple
     # The hero terminal shows the first 5.
     "terminal_lines": [
         "Building Web Applications",
@@ -153,8 +154,15 @@ WHAT_I_BUILD = [
     ("CMS Development", "WordPress, Elementor & custom CMS builds"),
 ]
 
-# Optional: pin repos by name. Empty = pick automatically (stars, then recent push).
+# Optional: pin repos by name. Pinned repos always win, so leave it empty for
+# the cards to follow FEATURED_SORT.
 FEATURED_REPOS: list[str] = []
+
+# How the 4 featured projects are picked when nothing is pinned:
+#   "newest"  - most recently created public repos; a new repo pushes the oldest out
+#   "updated" - most recently pushed repos
+#   "popular" - most stars and forks first
+FEATURED_SORT = "newest"
 
 ARCHITECTURE = {
     "client": ("Client", "Browser / User"),

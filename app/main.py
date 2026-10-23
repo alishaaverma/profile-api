@@ -62,6 +62,24 @@ async def card_about(username: str | None = None, n: int = 2):
     return await _render(f)
 
 
+@app.get("/card/city")
+async def card_city(username: str | None = None):
+    async def f():
+        login = _user(username)
+        user, cal = await asyncio.gather(gh.get_user(login), gh.get_calendar(login))
+        return live.contribution_city(user, cal)
+    return await _render(f)
+
+
+@app.get("/card/smart-contracts")
+async def card_smart_contracts(username: str | None = None):
+    async def f():
+        login = _user(username)
+        user, repos, tech = await asyncio.gather(gh.get_user(login), gh.get_repos(login), gh.get_tech(login))
+        return live.smart_contract_lab(user, repos, tech)
+    return await _render(f)
+
+
 @app.get("/card/tech-stack")
 async def card_tech(username: str | None = None, n: int = 3):
     async def f():
@@ -255,7 +273,7 @@ async def health():
 
 # ------------------------------------------------------------- preview
 
-PREVIEW_CARDS = ["hero", "about", "tech-stack", "what-i-build", "project/0", "project/1", "project/2", "project/3",
+PREVIEW_CARDS = ["hero", "city", "about", "tech-stack", "smart-contracts", "what-i-build", "project/0", "project/1", "project/2", "project/3",
                  "architecture", "timeline", "analytics", "activity", "playground", "backend", "cloud", "workflow",
                  "problem-solution", "developer-os", "achievements", "collaborate"]
 

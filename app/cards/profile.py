@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 
 from .. import config
 from .. import github as gh
-from .theme import (AMBER, BLUE, BORDER, CARD2, GREEN, MUTED, ORANGE, TEXT, bullet_list,
-                    compact, count_badge, cube, d, dot, esc, frame, heading, panel, skyline, svg, synced, wrap)
+from .theme import (AMBER, BLUE, BORDER, CARD2, ETH, GREEN, MUTED, ORANGE, SKIES, TEXT, bullet_list, celestial,
+                    compact, count_badge, cube, d, dot, esc, frame, heading, ist_now, panel, phase_label, sky,
+                    sky_phase, skyline, stars, svg, synced, wrap)
 
 P = config.PROFILE
 
@@ -23,10 +24,14 @@ def _years(user: dict) -> int:
 
 def hero(user: dict) -> str:
     W, H = 850, 330
-    b = frame(W, H)
-    # sunset glow + skyline behind the right column
-    b += f'<circle cx="690" cy="300" r="140" fill="{ORANGE}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
-    b += skyline(380, H - 1, 468, seed=11, opacity=.55, max_h=110)
+    phase = sky_phase()
+    b = frame(W, H) + sky(1, 1, W - 2, H - 2, phase)
+    # sky for the current time in India + skyline behind the right column
+    b += f'<circle cx="690" cy="300" r="140" fill="{SKIES[phase][1]}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
+    if phase == "night":
+        b += stars(412, 10, 130, 200, n=22, seed=11)
+    b += f'<g class="fade" {d(.4)}>{celestial(482, 150 if phase in ("dawn", "dusk") else 64, phase)}</g>'
+    b += skyline(380, H - 1, 468, seed=11, opacity=.55, max_h=110, lit=SKIES[phase][3])
     b += f'<rect x="1" y="{H - 60}" width="{W - 2}" height="59" rx="14" fill="url(#emberg)"/>'
 
     first, _, rest = user["name"].partition(" ")
@@ -41,8 +46,12 @@ def hero(user: dict) -> str:
     x = 34
     for i, chip in enumerate(P["chips"]):
         w = len(chip) * 6.6 + 22
-        b += (f'<g class="pop" {d(.7 + i * .08)}><rect x="{x}" y="222" width="{w:.0f}" height="24" rx="6" fill="{CARD2}" stroke="{BORDER}"/>'
-              f'<text x="{x + w / 2:.0f}" y="238" text-anchor="middle" font-size="11" fill="#c9d1d9">{esc(chip)}</text></g>')
+        hot = chip in P.get("highlight_chips", [])
+        b += (f'<g class="pop" {d(.7 + i * .08)}><rect x="{x}" y="222" width="{w:.0f}" height="24" rx="6" '
+              + (f'fill="{ETH}" fill-opacity=".16" stroke="{ETH}" filter="url(#glow)" class="glowpulse"/>' if hot
+                 else f'fill="{CARD2}" stroke="{BORDER}"/>') +
+              f'<text x="{x + w / 2:.0f}" y="238" text-anchor="middle" font-size="11" fill="{"#c9cbff" if hot else "#c9d1d9"}" '
+              f'font-weight="{700 if hot else 400}">{esc(chip)}</text></g>')
         x += w + 8
 
     status = "Available for new opportunities" if P.get("available") else "Currently busy building"
@@ -57,6 +66,8 @@ def hero(user: dict) -> str:
         b += f'<text x="{x + 14}" y="278" font-size="11.5" fill="#c9d1d9">{esc(m)}</text></g>'
         x += len(m) * 6.3 + 34
     b += synced(34, 306, right=False)
+    b += (f'<text x="{34 + len(f"live · {ist_now()}") * 5.75 + 22:.0f}" y="306" font-size="9.5" class="dim mono fade" {d(1.3)}>'
+          f'· {esc(phase_label(phase, user.get("location", "")))}</text>')
 
     # terminal
     tx, ty, tw, th = 548, 24, 276, 152
@@ -245,8 +256,9 @@ SERVICES = ["Web Application", "Backend System", "REST API", "Admin Dashboard",
 
 def collaborate(user: dict, n: int = 21) -> str:
     W, H = 850, 176
-    b = frame(W, H)
-    b += skyline(0, H - 1, W, seed=3, opacity=.35, max_h=60)
+    phase = sky_phase()
+    b = frame(W, H) + sky(1, 1, W - 2, H - 2, phase)
+    b += skyline(0, H - 1, W, seed=3, opacity=.35, max_h=60, lit=SKIES[phase][3])
     b += heading(24, 20, n, "Let's Collaborate", "Have a project in mind? Let's build something amazing together.")
     x, y = 24, 78
     for i, s in enumerate(SERVICES):

@@ -40,10 +40,15 @@ async def render(login: str) -> tuple[dict[str, str], list[dict]]:
 
     cards = {
         "hero": prof.hero(user),
+        "city": live.contribution_city(user, cal),
         "about": prof.about(user),
         "tech-stack": prof.tech_stack(tech),
+        "smart-contracts": live.smart_contract_lab(user, repos, tech),
         "what-i-build": prof.what_i_build(),
-        "featured-projects": prof.section_heading("Featured Projects", "Live from my GitHub repositories", 5),
+        "featured-projects": prof.section_heading("Featured Projects",
+                                                   {"newest": "My latest public repositories, live from GitHub",
+                                                    "updated": "My most recently updated repositories, live from GitHub"}
+                                                   .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 5),
         "architecture": eng.architecture(tech),
         "timeline": live.timeline_opensource(user, stats, cal),
         "analytics": live.analytics_exploring(user, stats, cal),

@@ -28,7 +28,7 @@ LANG_COLORS = {
     "Kotlin": "#A97BFF", "Dart": "#00B4AB", "C++": "#f34b7d", "C": "#555555",
     "PHP": "#4F5D95", "Shell": "#89e051", "Jupyter Notebook": "#DA5B0B",
     "Vue": "#41b883", "Rust": "#dea584", "Ruby": "#701516", "C#": "#178600",
-    "SCSS": "#c6538c", "Dockerfile": "#384d54",
+    "SCSS": "#c6538c", "Dockerfile": "#384d54", "Solidity": "#AA6746",
 }
 
 _cache: dict[str, tuple[float, object]] = {}
@@ -138,6 +138,7 @@ async def get_repos(login: str) -> dict:
                 "url": r["html_url"],
                 "homepage": r.get("homepage") or "",
                 "pushed_at": r.get("pushed_at"),
+                "created_at": r.get("created_at"),
             }
             for r in raw
             if not r.get("fork") and not r.get("archived") and r["name"].lower() != login.lower()
@@ -159,7 +160,11 @@ def featured(repos: list[dict], count: int = 4) -> list[dict]:
         picked = [by_name[n.lower()] for n in config.FEATURED_REPOS if n.lower() in by_name]
         if picked:
             return picked[:count]
-    # Prefer repos with stars, a description and recent activity.
+    if config.FEATURED_SORT == "newest":
+        return sorted(repos, key=lambda r: r["created_at"] or "", reverse=True)[:count]
+    if config.FEATURED_SORT == "updated":
+        return sorted(repos, key=lambda r: r["pushed_at"] or "", reverse=True)[:count]
+    # "popular": prefer repos with stars, a description and recent activity.
     ranked = sorted(
         repos,
         key=lambda r: (r["stars"] + r["forks"], bool(r["description"]), r["pushed_at"] or ""),
@@ -426,10 +431,14 @@ def _matches(key: str, tokens: set[str]) -> bool:
     return key in tokens
 
 
-def tech_count(tech: dict, *names: str) -> int:
-    """How many repos use any of these TECH_STACK items (or other alias-less names)."""
+def tech_repo_names(tech: dict, *names: str) -> list[str]:
+    """Repos that use any of these TECH_STACK items (or other alias-less names)."""
     keys = [k for name in names for k in config.TECH_ALIASES.get(name, [name.lower()])]
-    return sum(1 for tokens in tech["repos"].values() if any(_matches(k, tokens) for k in keys))
+    return [repo for repo, tokens in tech["repos"].items() if any(_matches(k, tokens) for k in keys)]
+
+
+def tech_count(tech: dict, *names: str) -> int:
+    return len(tech_repo_names(tech, *names))
 
 
 def tech_repos(tech: dict, marker: str) -> int:

@@ -19,6 +19,7 @@ DIM = "#56606c"
 GREEN = "#3fb950"
 BLUE = "#58a6ff"
 CYAN = "#39c5cf"
+ETH = "#8c8cff"  # Solidity / Web3 accent
 
 FONT = "'Segoe UI', Ubuntu, 'Helvetica Neue', Arial, sans-serif"
 MONO = "'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace"
@@ -112,6 +113,71 @@ def ist_now() -> str:
     return (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%d %b %Y, %H:%M IST")
 
 
+# ------------------------------------------------------------ day / night
+
+# Cards re-render every hour, so the sky follows the time of day in India.
+# phase: (sky top, horizon glow, glow opacity, chance a window is lit, sun/moon colour)
+SKIES = {
+    "dawn": ("#1b2140", "#ff9a5a", .30, .15, "#ffb067"),
+    "day": ("#0e2440", "#4a8fd8", .30, .05, "#ffd76a"),
+    "dusk": ("#1c1030", "#ff5e3a", .36, .28, "#ff8c42"),
+    "night": ("#04060c", "#24407a", .32, .42, "#e8ecf5"),
+}
+
+
+def sky_phase() -> str:
+    h = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).hour
+    if 5 <= h < 8:
+        return "dawn"
+    if 8 <= h < 17:
+        return "day"
+    if 17 <= h < 20:
+        return "dusk"
+    return "night"
+
+
+def phase_label(phase: str, location: str = "") -> str:
+    word = {"dawn": "sunrise", "day": "daytime", "dusk": "sunset", "night": "night"}[phase]
+    return f"{word} in {location.split(',')[0]}" if location else word
+
+
+def sky(x, y, w, h, phase: str, rx: int = 14) -> str:
+    """Gradient wash from a clear top to a phase-coloured horizon at the bottom."""
+    top, horizon, op, _, _ = SKIES[phase]
+    gid = f"sky{x}-{y}-{w}"
+    return (f'<defs><linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="0" stop-color="{top}" stop-opacity=".0"/>'
+            f'<stop offset="1" stop-color="{horizon}" stop-opacity="{op}"/></linearGradient></defs>'
+            f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="url(#{gid})"/>')
+
+
+def celestial(cx, cy, phase: str, r: float = 18) -> str:
+    """Sun by day, low orange sun at dawn/dusk, moon at night."""
+    color = SKIES[phase][4]
+    out = f'<circle cx="{cx}" cy="{cy}" r="{r * 2.2:.0f}" fill="{color}" fill-opacity=".14" filter="url(#softglow)" class="glowpulse"/>'
+    if phase == "night":
+        out += (f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" filter="url(#glow)"/>'
+                f'<circle cx="{cx - r * .3:.1f}" cy="{cy - r * .2:.1f}" r="{r * .22:.1f}" fill="#c3cad8"/>'
+                f'<circle cx="{cx + r * .35:.1f}" cy="{cy + r * .3:.1f}" r="{r * .15:.1f}" fill="#c3cad8"/>'
+                f'<circle cx="{cx + r * .1:.1f}" cy="{cy - r * .5:.1f}" r="{r * .1:.1f}" fill="#c3cad8"/>')
+        return out
+    if phase == "day":
+        rays = "".join(f'<path d="M{cx},{cy - r * 1.35:.1f}v{-r * .45:.1f}" stroke="{color}" stroke-width="2" '
+                       f'stroke-linecap="round" transform="rotate({a} {cx} {cy})"/>' for a in range(0, 360, 45))
+        out += f'<g class="spin">{rays}</g>'
+    return out + f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}" filter="url(#glow)"/>'
+
+
+def stars(x, y, w, h, n: int = 30, seed: int = 5) -> str:
+    import random
+
+    rnd = random.Random(seed)
+    return "".join(
+        f'<circle cx="{x + rnd.random() * w:.0f}" cy="{y + rnd.random() * h:.0f}" r="{.6 + rnd.random() * .9:.1f}" '
+        f'fill="#dfe8ff" class="twinkle" style="animation-delay:{rnd.random() * 3:.1f}s"/>'
+        for _ in range(n))
+
+
 def d(sec: float) -> str:
     """inline animation-delay style"""
     return f'style="animation-delay:{sec:.2f}s"'
@@ -201,8 +267,9 @@ def flow_line(path: str, color=ORANGE, dots: int = 2, dur: float = 2.4, width=1.
     return out
 
 
-def skyline(x0: int, base: int, width: int, seed: int = 7, opacity: float = 0.9, max_h: int = 90) -> str:
-    """Procedural city silhouette with twinkling windows."""
+def skyline(x0: int, base: int, width: int, seed: int = 7, opacity: float = 0.9, max_h: int = 90,
+            lit: float = 0.22) -> str:
+    """Procedural city silhouette with twinkling windows; `lit` is the chance a window is on."""
     import random
 
     rnd = random.Random(seed)
@@ -214,7 +281,7 @@ def skyline(x0: int, base: int, width: int, seed: int = 7, opacity: float = 0.9,
         out += f'<rect x="{x}" y="{base - bh}" width="{bw}" height="{bh}" fill="#0a0f17" stroke="#141c28"/>'
         for wy in range(base - bh + 6, base - 6, 9):
             for wx in range(x + 4, x + bw - 4, 7):
-                if rnd.random() < 0.22:
+                if rnd.random() < lit:
                     col = ORANGE if rnd.random() < 0.75 else "#7fb4ff"
                     out += (
                         f'<rect x="{wx}" y="{wy}" width="3" height="4" fill="{col}" class="twinkle" '

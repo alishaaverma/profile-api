@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 from datetime import datetime, timezone
 
 from .. import config
+from .. import github as gh
 from ..github import featured, lang_color, time_ago
-from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, GREEN, MUTED, ORANGE, TEXT, compact, d, dot, esc,
-                    frame, heading, panel, svg, synced, trunc, wrap)
+from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, GREEN, MUTED, ORANGE, SKIES, TEXT, celestial, compact, d,
+                    dot, esc, frame, heading, panel, phase_label, sky, sky_phase, stars, svg, synced, trunc, wrap)
 
 STAR = "M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
 FORK = "M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"
@@ -80,6 +82,10 @@ def project_card(repo: dict | None, idx: int, login: str) -> str:
     b += f'<g class="fade">{_mock(12, 12, W - 24, 112, accent, idx % 4)}</g>'
     b += f'<text x="16" y="150" font-size="15" font-weight="700" class="rise" {d(.2)}>{esc(trunc(repo["name"].replace("_", " "), 40))}</text>'
     b += f'<text x="{W - 16}" y="150" text-anchor="end" font-size="13" fill="{ORANGE}" class="pulse">↗</text>'
+    created = repo.get("created_at")
+    if created and (datetime.now(timezone.utc) - datetime.fromisoformat(created.replace("Z", "+00:00"))).days < 30:
+        b += (f'<g class="pop" {d(.5)}><rect x="{W - 66}" y="20" width="42" height="18" rx="9" fill="{GREEN}" filter="url(#glow)" class="glowpulse"/>'
+              f'<text x="{W - 45}" y="33" text-anchor="middle" font-size="9.5" font-weight="800" fill="#04140a">NEW</text></g>')
     desc = repo["description"] or f"A {repo['language'] or 'software'} project by @{login}."
     for i, line in enumerate(wrap(desc, 60, 2)):
         b += f'<text x="16" y="{171 + i * 15}" font-size="11" class="muted rise" {d(.3)}>{esc(line)}</text>'
@@ -392,3 +398,227 @@ def developer_os(user: dict, repos: dict, events: list[dict], n: int = 19) -> st
               f'<text x="{sx + 160}" y="{y}" font-size="10" class="mono" fill="{c}">{esc(v)}</text></g>')
     b += synced(826, 256)
     return svg(W, H, b, title="Developer OS")
+
+
+# ---------------------------------------------------- smart contract lab
+
+SOL_KEYWORDS = {"pragma", "solidity", "contract", "public", "external", "function", "event", "indexed",
+                "require", "emit", "true", "false", "returns", "view"}
+SOL_TYPES = {"string", "uint256", "bool", "address"}
+_SOL_TOKEN = re.compile(r'(//.*$|"[^"]*"|\b\d[\d.]*\b|\b[A-Za-z_]\w*\b|\S)')
+
+# (label, alias looked up with tech_count)
+WEB3_TOOLS = [("Hardhat", "hardhat"), ("Foundry", "foundry"), ("Truffle", "truffle"), ("Ethers.js", "ethers"),
+              ("Web3.js", "web3"), ("OpenZeppelin", "@openzeppelin/*"), ("MetaMask", "metamask")]
+
+
+def _sol_line(line: str) -> str:
+    """Syntax-highlight one line of Solidity as tspans."""
+    out, pos = "", 0
+    for m in _SOL_TOKEN.finditer(line):
+        out += esc(line[pos:m.start()])
+        tok = m.group(0)
+        if tok.startswith("//"):
+            color = "#6a737d"
+        elif tok.startswith('"'):
+            color = "#a5d6ff"
+        elif tok[0].isdigit():
+            color = AMBER
+        elif tok in SOL_KEYWORDS:
+            color = ETH
+        elif tok in SOL_TYPES:
+            color = CYAN
+        elif tok[0].isupper():
+            color = "#ffa657"
+        else:
+            color = ""
+        out += f'<tspan fill="{color}">{esc(tok)}</tspan>' if color else esc(tok)
+        pos = m.end()
+    return out + esc(line[pos:])
+
+
+def _eth_diamond(cx, cy, s=14) -> str:
+    return (f'<g class="float" filter="url(#glow)">'
+            f'<polygon points="{cx},{cy - s} {cx + s * .62:.1f},{cy + s * .1:.1f} {cx},{cy + s * .45:.1f} {cx - s * .62:.1f},{cy + s * .1:.1f}" fill="{ETH}" fill-opacity=".9"/>'
+            f'<polygon points="{cx},{cy + s * .6:.1f} {cx + s * .62:.1f},{cy + s * .25:.1f} {cx},{cy + s:.1f} {cx - s * .62:.1f},{cy + s * .25:.1f}" fill="{ETH}" fill-opacity=".6"/>'
+            f'<polygon points="{cx},{cy - s} {cx},{cy + s * .45:.1f} {cx + s * .62:.1f},{cy + s * .1:.1f}" fill="#fff" fill-opacity=".18"/></g>')
+
+
+def smart_contract_lab(user: dict, repos: dict, tech: dict) -> str:
+    W, H = 850, 360
+    sol = gh.tech_repo_names(tech, "Solidity")
+    by_name = {r["name"]: r for r in repos["repos"]}
+    sol_repos = sorted((by_name[n] for n in sol if n in by_name), key=lambda r: r["pushed_at"] or "", reverse=True)
+    tools = ["Solidity"] + [label for label, alias in WEB3_TOOLS if gh.tech_count(tech, alias)]
+
+    b = frame(W, H)
+    b += f'<circle cx="780" cy="40" r="70" fill="{ETH}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
+    b += heading(24, 20, None, "Smart Contract Lab", "Solidity & Web3 — where my full-stack work goes on-chain")
+    b += _eth_diamond(800, 40)
+
+    # editor with a contract written from the live profile
+    ident = re.sub(r"\W", "", user["name"].title()) or "Developer"
+    code = [
+        "// SPDX-License-Identifier: MIT",
+        "pragma solidity ^0.8.24;",
+        "",
+        f"contract {ident} {{",
+        f'    string public role = "{config.PROFILE["role"]}";',
+        f"    uint256 public solidityRepos = {len(sol)};",
+        f"    bool public openToWork = {'true' if config.PROFILE.get('available') else 'false'};",
+        "",
+        "    event Hired(address indexed by);",
+        "",
+        "    function hire() external {",
+        '        require(openToWork, "busy building");',
+        "        emit Hired(msg.sender);",
+        "    }",
+        "}",
+    ]
+    ex, ey, ew = 24, 70, 452
+    eh = 34 + len(code) * 14 + 26
+    b += f'<g class="rise" {d(.1)}>' + panel(ex, ey, ew, eh, 10, stroke="#2b2f55", fill="#0a0c16")
+    b += f'<rect x="{ex}" y="{ey}" width="{ew}" height="24" rx="10" fill="#11142a"/>'
+    b += f'<rect x="{ex}" y="{ey + 14}" width="{ew}" height="10" fill="#11142a"/>'
+    b += (f'<rect x="{ex + 10}" y="{ey + 4}" width="92" height="20" rx="5" fill="#0a0c16"/>'
+          f'<circle cx="{ex + 21}" cy="{ey + 14}" r="3.5" fill="{ETH}"/>'
+          f'<text x="{ex + 30}" y="{ey + 18}" font-size="10" class="mono" fill="#c9d1d9">Profile.sol</text>')
+    b += f'<text x="{ex + ew - 12}" y="{ey + 17}" text-anchor="end" font-size="9" class="mono dim">solc 0.8.24</text></g>'
+    for i, line in enumerate(code):
+        y = ey + 42 + i * 14
+        b += f'<text x="{ex + 12}" y="{y}" font-size="9" class="mono dim">{i + 1:>2}</text>'
+        if line:
+            b += (f'<text x="{ex + 34}" y="{y}" font-size="10" class="mono type" fill="#c9d1d9" '
+                  f'style="animation-delay:{.4 + i * .18:.2f}s">{_sol_line(line)}</text>')
+    yb = ey + eh - 10
+    b += (f'<text x="{ex + 12}" y="{yb}" font-size="9.5" class="mono fade" fill="{GREEN}" {d(.6 + len(code) * .18)}>'
+          f'✓ Compiled Profile.sol · 0 errors</text>')
+    b += f'<rect x="{ex + 34 + 1 * 6}" y="{ey + 42 + 14 * 14 - 9}" width="6" height="11" fill="{ETH}" class="blink"/>'
+
+    # right column: live Solidity repos and detected tooling
+    rx = 494
+    b += (f'<g class="pop" {d(.3)}>' + panel(rx, 70, 332, 52, 10, stroke=ETH, extra='stroke-opacity=".45"') +
+          f'<text x="{rx + 16}" y="104" font-size="26" font-weight="800" fill="{ETH}">{len(sol)}</text>'
+          f'<text x="{rx + 52}" y="92" font-size="11" font-weight="700">Solidity repositories</text>'
+          f'<text x="{rx + 52}" y="107" font-size="9.5" class="muted">detected live from my GitHub</text></g>')
+    x, y = rx, 134
+    for i, t in enumerate(tools):
+        w = len(t) * 6 + 18
+        if x + w > rx + 332:
+            x, y = rx, y + 26
+        b += (f'<g class="pop" {d(.5 + i * .08)}><rect x="{x}" y="{y}" width="{w:.0f}" height="20" rx="5" '
+              f'fill="{ETH}" fill-opacity=".12" stroke="{ETH}" stroke-opacity=".5"/>'
+              f'<text x="{x + w / 2:.0f}" y="{y + 14}" text-anchor="middle" font-size="10" fill="#c9cbff">{esc(t)}</text></g>')
+        x += w + 6
+    y += 34
+    if not sol_repos:
+        b += f'<text x="{rx}" y="{y + 14}" font-size="10.5" class="muted">First public contract coming soon…</text>'
+    for i, r in enumerate(sol_repos[:3]):
+        yy = y + i * 50
+        b += (f'<g class="rise" {d(.7 + i * .12)}>' + panel(rx, yy, 332, 42, 8) +
+              f'<rect x="{rx}" y="{yy}" width="3" height="42" rx="1.5" fill="{ETH}"/>'
+              f'<text x="{rx + 14}" y="{yy + 17}" font-size="11" font-weight="700">{esc(trunc(r["name"], 34))}</text>'
+              f'<text x="{rx + 318}" y="{yy + 17}" text-anchor="end" font-size="9" class="muted">★ {r["stars"]} · {esc(time_ago(r["pushed_at"]))}</text>'
+              f'<text x="{rx + 14}" y="{yy + 32}" font-size="9.5" class="muted">{esc(trunc(r["description"] or "Solidity smart contracts", 58))}</text></g>')
+    b += synced(826, H - 12)
+    return svg(W, H, b, title="Smart Contract Lab")
+
+
+# --------------------------------------------------- contribution city
+
+# building faces per contribution level 1-4: front, top, side
+CITY = [("#3a1d0c", "#6b3615", "#26130a"), ("#6b2f0e", "#a94d18", "#46200b"),
+        ("#a8461a", "#e2702e", "#6e2d10"), ("#e0682a", "#ffad6b", "#93401a")]
+
+
+def _streaks(days: list[dict]) -> tuple[int, int]:
+    """(current, longest) runs of days with contributions. Today may still be empty."""
+    longest = run = 0
+    for day in days:
+        run = run + 1 if day["count"] else 0
+        longest = max(longest, run)
+    current = 0
+    for day in reversed(days[:-1] if days and not days[-1]["count"] else days):
+        if not day["count"]:
+            break
+        current += 1
+    return current, longest
+
+
+def contribution_city(user: dict, calendar: dict) -> str:
+    """Last year of contributions as a 3D city: one building per day, lit for the time of day."""
+    W, H = 850, 270
+    phase = sky_phase()
+    lit = SKIES[phase][3]
+    weeks = calendar["weeks"][-53:]
+    days = sorted((day for week in weeks for day in week), key=lambda x: x["date"])
+    peak = max(days, key=lambda x: x["count"]) if days else {"count": 0, "date": ""}
+    top = max(peak["count"], 1)
+    current, longest = _streaks(days)
+
+    b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase)
+    if phase == "night":
+        b += stars(380, 60, 450, 60, n=28, seed=4)
+    b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in ("dawn", "dusk") else 66, phase, r=15)}</g>'
+    b += heading(24, 20, None, "Contribution City",
+                 f"Every building is one day of my last year on GitHub · {calendar['total']:,} contributions")
+    chips = [(str(current), "day streak"), (str(longest), "best streak"), (str(peak["count"]), "best day")]
+    x = W - 24
+    for i, (v, label) in enumerate(reversed(chips)):
+        w = 74
+        x -= w
+        b += (f'<g class="pop" {d(.2 + i * .1)}>' + panel(x, 22, w, 38, 8) +
+              f'<text x="{x + w / 2}" y="41" text-anchor="middle" font-size="14" font-weight="800" fill="{AMBER}">{v}</text>'
+              f'<text x="{x + w / 2}" y="53" text-anchor="middle" font-size="8.5" class="muted">{label}</text></g>')
+        x -= 8
+
+    # oblique projection: weeks run left to right, Sunday is the back row (up and right)
+    sx, step, bw, ox = 13.2, 5, 10, 4
+    x0 = (W - (len(weeks) * sx + 6 * step + bw)) / 2
+    ground = H - 40
+    b += (f'<polygon points="{x0 - 6:.0f},{ground + 4} {x0 + len(weeks) * sx + 4:.0f},{ground + 4} '
+          f'{x0 + len(weeks) * sx + 6 * step + 10:.0f},{ground - 6 * step - 4} {x0 + 6 * step:.0f},{ground - 6 * step - 4}" '
+          f'fill="#0b111a" stroke="{BORDER}"/>')
+    rnd = random.Random(calendar["total"])
+    today = days[-1]["date"] if days else ""
+    blocks = []
+    for wi, week in enumerate(weeks):
+        for day in week:
+            row = (datetime.strptime(day["date"], "%Y-%m-%d").weekday() + 1) % 7  # Sunday = 0
+            blocks.append((row, wi, day))
+    for row, wi, day in sorted(blocks, key=lambda t: (t[0], t[1])):
+        bx = x0 + wi * sx + (6 - row) * step
+        by = ground - (6 - row) * step
+        tip = f'<title>{day["count"]} contributions on {day["date"]}</title>'
+        if not day["count"]:
+            b += (f'<polygon points="{bx:.1f},{by} {bx + bw:.1f},{by} {bx + bw + ox:.1f},{by - ox} {bx + ox:.1f},{by - ox}" '
+                  f'fill="#141c28">{tip}</polygon>')
+            continue
+        h = 4 + 58 * (day["count"] / top) ** .5
+        front, roof, side = CITY[min(max(day["level"], 1), 4) - 1]
+        t = by - h
+        o = (f'<g class="growy" style="animation-delay:{.2 + wi * .025:.2f}s">{tip}'
+             f'<rect x="{bx:.1f}" y="{t:.1f}" width="{bw}" height="{h:.1f}" fill="{front}"/>'
+             f'<polygon points="{bx:.1f},{t:.1f} {bx + ox:.1f},{t - ox:.1f} {bx + bw + ox:.1f},{t - ox:.1f} {bx + bw:.1f},{t:.1f}" fill="{roof}"/>'
+             f'<polygon points="{bx + bw:.1f},{t:.1f} {bx + bw + ox:.1f},{t - ox:.1f} {bx + bw + ox:.1f},{by - ox:.1f} {bx + bw:.1f},{by}" fill="{side}"/>')
+        for wy in range(int(t + 3), int(by - 3), 5):
+            for wx in (bx + 2, bx + 6):
+                if rnd.random() < lit:
+                    o += (f'<rect x="{wx:.1f}" y="{wy}" width="2" height="2" fill="{AMBER}" class="twinkle" '
+                          f'style="animation-delay:{rnd.random() * 3:.1f}s;animation-duration:{3 + rnd.random() * 4:.1f}s"/>')
+        if day["date"] == today:  # beacon on today's building
+            o += f'<circle cx="{bx + bw / 2 + ox / 2:.1f}" cy="{t - ox - 3:.1f}" r="2.2" fill="#ff4d4d" class="pulse" filter="url(#glow)"/>'
+        if day is peak:
+            peak_xy = (bx + bw / 2 + ox / 2, t - ox)
+        b += o + "</g>"
+
+    if peak["count"]:
+        px, py = peak_xy
+        when = datetime.strptime(peak["date"], "%Y-%m-%d").strftime("%d %b")
+        label = f'{peak["count"]} on {when}'
+        b += (f'<g class="fade" {d(2)}><line x1="{px:.1f}" y1="{py - 4:.1f}" x2="{px:.1f}" y2="{py - 16:.1f}" stroke="{AMBER}" stroke-dasharray="2 2"/>'
+              f'<text x="{px:.1f}" y="{py - 20:.1f}" text-anchor="middle" font-size="9.5" font-weight="700" fill="{AMBER}">{esc(label)}</text></g>')
+    b += synced(24, H - 12, right=False)
+    b += (f'<text x="826" y="{H - 12}" text-anchor="end" font-size="9.5" class="dim mono fade" {d(1.3)}>'
+          f'{esc(phase_label(phase, user.get("location", "")))} · windows light up at night</text>')
+    return svg(W, H, b, title="Contribution City")
