@@ -186,8 +186,10 @@ ARCHITECTURE = {
 # The coding pet in Contribution City: grows egg -> chick -> bird with your best streak.
 PET_NAME = "Byte"
 
-# Live weather and air quality shown in Contribution City (Greater Noida).
-WEATHER_LAT, WEATHER_LON = 28.47, 77.50
+# Live weather and air quality shown in Contribution City (Sector 46, Noida), and the place name
+# used in "afternoon in ..." (empty = the first part of your GitHub location).
+WEATHER_LAT, WEATHER_LON = 28.55, 77.36
+PLACE_NAME = "Noida"
 BIRTHDAY = "09-17"  # "MM-DD" to get balloons on your birthday, e.g. "07-21"
 
 # The journey timeline is built from your repos: one stop per year with the

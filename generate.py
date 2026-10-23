@@ -31,14 +31,16 @@ BUTTONS = {
     "button-email": ("Email", "", False),
     "button-resume": ("Resume", "", False),
     "button-feed-byte": ("Feed Byte a cookie", "cookie", True),
+    "button-vote": ("Vote on an idea", "vote", True),
+    "button-ama": ("Ask me anything", "ama", False),
 }
 
 
 async def render(login: str) -> tuple[dict[str, str], list[dict]]:
-    user, repos, events, stats, cal, tech, festivals, weather, commits, til, feeds = await asyncio.gather(
+    user, repos, events, stats, cal, tech, festivals, weather, commits, til, feeds, ideas, ama = await asyncio.gather(
         gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login),
         gh.get_tech(login), gh.get_festival_dates(), gh.get_weather(), gh.get_commit_log(login), gh.get_til(login),
-        gh.get_byte_feeds(login))
+        gh.get_byte_feeds(login), gh.get_ideas(login), gh.get_ama(login))
     set_festival_dates(festivals)
     top = gh.featured(repos["repos"], 4)
     building = await gh.get_now_building(login, repos)
@@ -46,7 +48,7 @@ async def render(login: str) -> tuple[dict[str, str], list[dict]]:
     # Section numbers follow the order of the cards in the profile README.
     cards = {
         "hero": prof.hero(user),
-        "city": live.contribution_city(user, cal, weather, feeds),
+        "city": live.contribution_city(user, cal, weather, feeds, repos),
         "about": prof.about(user, 2),
         "smart-contracts": live.smart_contract_lab(user, repos, tech, 3),
         "featured-projects": prof.section_heading("Featured Projects",
@@ -55,19 +57,20 @@ async def render(login: str) -> tuple[dict[str, str], list[dict]]:
                                                    .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 4),
         "now-building": live.now_building(building, 5),
         "coding-dna": live.coding_dna(commits, 6),
+        "community": live.community(ideas, ama, 7),
         # the rest sits under "Explore more about me" in the profile README
-        "tech-stack": prof.tech_stack(tech, 7),
-        "what-i-build": prof.what_i_build(8),
-        "architecture": eng.architecture(tech, 9),
-        "timeline": live.timeline_opensource(user, repos, stats, cal, 10),
-        "analytics": live.analytics_exploring(user, stats, cal, repos, tech, til, 12),
-        "activity": live.activity_terminal(user, repos, events, 14),
-        "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos", 16),
-        "cloud": eng.cloud_deploy(tech, 17),
+        "tech-stack": prof.tech_stack(tech, 9),
+        "what-i-build": prof.what_i_build(10),
+        "architecture": eng.architecture(tech, 11),
+        "timeline": live.timeline_opensource(user, repos, stats, cal, 12),
+        "analytics": live.analytics_exploring(user, stats, cal, repos, tech, til, 14),
+        "activity": live.activity_terminal(user, repos, events, 16),
+        "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos", 18),
+        "cloud": eng.cloud_deploy(tech, 19),
         # 1 Dec - 7 Jan: the year in review takes the achievements slot
-        "achievements": (eng.year_in_review(user, repos, stats, cal, tech, 18) if eng.wrapped_season()
-                         else eng.achievements(user, repos, stats, cal, tech, 18)),
-        "collaborate": prof.collaborate(user, 19),
+        "achievements": (eng.year_in_review(user, repos, stats, cal, tech, 20) if eng.wrapped_season()
+                         else eng.achievements(user, repos, stats, cal, tech, 20)),
+        "collaborate": prof.collaborate(user, 21),
     }
     for i in range(4):
         cards[f"project-{i}"] = live.project_card(top[i] if i < len(top) else None, i, login)

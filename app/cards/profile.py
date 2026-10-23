@@ -317,6 +317,14 @@ def _icon(kind: str, x: float, y: float) -> str:
     if k in ("email", "mail"):
         return (f'<rect x="{x}" y="{y + 2}" width="18" height="14" rx="2" stroke="{ORANGE}" stroke-width="1.6"/>'
                 f'<path d="M{x + 1} {y + 3}l8 6.5 8-6.5" stroke="{ORANGE}" stroke-width="1.6"/>')
+    if k == "vote":
+        return (f'<rect x="{x + 2}" y="{y + 8}" width="14" height="10" rx="2" fill="#1a0d02" fill-opacity=".25" stroke="#1a0d02"/>'
+                f'<rect x="{x + 5}" y="{y + 1}" width="8" height="9" rx="1" fill="#ffffff" stroke="#1a0d02" stroke-width=".8"/>'
+                f'<path d="M{x + 6.5},{y + 5.5}l1.5,1.5 3,-3" stroke="{GREEN}" stroke-width="1.4"/>')
+    if k == "ama":
+        return (f'<path d="M{x + 1},{y + 3}a3,3 0 0 1 3,-3h10a3,3 0 0 1 3,3v7a3,3 0 0 1 -3,3h-7l-4,4v-4h-0a3,3 0 0 1 -2,-3z" '
+                f'fill="{ORANGE}" fill-opacity=".2" stroke="{ORANGE}" stroke-width="1.4"/>'
+                f'<text x="{x + 9}" y="{y + 10}" text-anchor="middle" font-size="8" font-weight="800" fill="{ORANGE}">?</text>')
     if k == "cookie":
         return (f'<circle cx="{x + 9}" cy="{y + 9}" r="8.5" fill="#c98b4a" stroke="#8a5a2b"/>'
                 + "".join(f'<circle cx="{x + cx}" cy="{y + cy}" r="1.6" fill="#3b2412"/>'

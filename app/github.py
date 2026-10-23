@@ -567,6 +567,54 @@ async def get_byte_feeds(login: str) -> dict | None:
     return await _cached(f"feeds:{login}", load)
 
 
+# ------------------------------------------------------- community: votes, AMA
+
+async def get_ideas(login: str) -> list[dict]:
+    """Open issues labelled "idea" on my profile repo, most 👍 first:
+    [{'title', 'votes', 'url'}]. I post the ideas; visitors vote with a 👍 reaction."""
+
+    async def load():
+        try:
+            raw = await _get(f"/repos/{login}/{login}/issues", labels="idea", state="open", per_page=30)
+        except GitHubError:
+            return []
+        ideas = [{"title": i["title"], "votes": (i.get("reactions") or {}).get("+1", 0), "url": i["html_url"]}
+                 for i in raw if "pull_request" not in i]
+        return sorted(ideas, key=lambda i: -i["votes"])
+
+    return await _cached(f"ideas:{login}", load)
+
+
+async def get_ama(login: str, limit: int = 2) -> list[dict]:
+    """The newest "AMA" issues on my profile repo that I have answered in a comment:
+    [{'question', 'answer', 'asker', 'url'}]."""
+
+    async def load():
+        try:
+            raw = await _get("/search/issues", q=f'repo:{login}/{login} is:issue in:title "AMA"',
+                             sort="created", order="desc", per_page=15)
+        except GitHubError:
+            return []
+        out = []
+        for item in raw.get("items", []):
+            if not item.get("comments") or item["user"]["login"].lower() == login.lower():
+                continue
+            try:
+                comments = await _get(f"/repos/{login}/{login}/issues/{item['number']}/comments", per_page=30)
+            except GitHubError:
+                continue
+            answer = next((c["body"] for c in comments if c["user"]["login"].lower() == login.lower()), "")
+            if answer:
+                question = re.sub(r"^\s*AMA\s*[:\-—]?\s*", "", item["title"], flags=re.I) or (item.get("body") or "")
+                out.append({"question": question.strip(), "answer": " ".join(answer.split()),
+                            "asker": item["user"]["login"], "url": item["html_url"]})
+            if len(out) == limit:
+                break
+        return out
+
+    return await _cached(f"ama:{login}", load)
+
+
 # ---------------------------------------------------------- today I learned
 
 _TIL_LINE = re.compile(r"^\s*[-*]\s+(?:\*\*)?(\d{4}-\d{2}-\d{2})?(?:\*\*)?\s*[:—–-]?\s*(.+?)\s*$")
@@ -620,7 +668,7 @@ async def get_weather() -> dict | None:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 wx, air = await asyncio.gather(
                     client.get("https://api.open-meteo.com/v1/forecast",
-                               params={**where, "current": "temperature_2m,weather_code"}),
+                               params={**where, "current": "temperature_2m,weather_code,precipitation"}),
                     client.get("https://air-quality-api.open-meteo.com/v1/air-quality",
                                params={**where, "current": "us_aqi"}))
             now, aq = wx.json()["current"], air.json().get("current", {})
@@ -628,6 +676,9 @@ async def get_weather() -> dict | None:
             return None
         code = now.get("weather_code", 0)
         kind, words = next(((k, w) for codes, k, w in WEATHER_CODES if code in codes), ("clouds", "cloudy"))
+        # the model reports a trace of "drizzle" under thin cloud; only draw rain when real rain falls
+        if kind == "rain" and (now.get("precipitation") or 0) < 0.5:
+            kind, words = "clouds", "cloudy"
         aqi = aq.get("us_aqi")
         label = next(name for limit, name in AQI_LEVELS if aqi is None or aqi <= limit) if aqi is not None else ""
         if kind in ("clear", "clouds") and aqi and aqi > 150:

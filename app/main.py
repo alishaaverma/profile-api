@@ -68,11 +68,20 @@ async def card_about(username: str | None = None, n: int = 2):
 async def card_city(username: str | None = None):
     async def f():
         login = _user(username)
-        user, cal, festivals, weather, feeds = await asyncio.gather(
+        user, cal, festivals, weather, feeds, repos = await asyncio.gather(
             gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates(), gh.get_weather(),
-            gh.get_byte_feeds(login))
+            gh.get_byte_feeds(login), gh.get_repos(login))
         set_festival_dates(festivals)
-        return live.contribution_city(user, cal, weather, feeds)
+        return live.contribution_city(user, cal, weather, feeds, repos)
+    return await _render(f)
+
+
+@app.get("/card/community")
+async def card_community(username: str | None = None, n: int = 7):
+    async def f():
+        login = _user(username)
+        ideas, ama = await asyncio.gather(gh.get_ideas(login), gh.get_ama(login))
+        return live.community(ideas, ama, n)
     return await _render(f)
 
 
@@ -300,7 +309,7 @@ async def health():
 # ------------------------------------------------------------- preview
 
 PREVIEW_CARDS = ["hero", "city", "about", "tech-stack", "smart-contracts", "what-i-build", "project/0", "project/1", "project/2", "project/3",
-                 "now-building", "coding-dna", "architecture", "timeline", "analytics", "activity", "playground", "cloud",
+                 "now-building", "coding-dna", "community", "architecture", "timeline", "analytics", "activity", "playground", "cloud",
                  "achievements", "collaborate"]
 
 

@@ -45,10 +45,11 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes, a flooded street with paper boats when it rains, and Byte, a coding pet that grows with your best streak, sulks when you stop committing and counts the cookies visitors feed it |
+| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes, a flooded street with paper boats when it rains, and Byte, a coding pet that grows with your best streak, sulks when you stop committing counts the cookies visitors feed it (a friend chick joins every 10), and dresses for the moment: mask when the AQI is bad, umbrella in rain, Santa hat, party hat, diya, nightcap. At night your repos shine as constellations, and one car drives the street per contribution today |
 | `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
 | `/card/smart-contracts` | Smart Contract Lab: a live `Profile.sol`, Solidity repos and detected Web3 tools |
 | `/card/now-building` | most recently pushed repo, its latest commit and 30-day commit momentum |
+| `/card/community` | Community Corner: live 👍 votes on "idea" issues, and AMA questions you have answered |
 | `/card/coding-dna` | Night Owl / Early Bird clock from commit times, and generative art from the latest commit hashes |
 | `/card/architecture`, `/card/cloud` | most used tools per layer, repos with Docker / GitHub Actions / AWS |
 | `/card/achievements` | milestones plus unlockable badges; from 1 Dec to 7 Jan it becomes your year in review (Wrapped) |
@@ -95,3 +96,10 @@ Create a public repo named `til` (or change `TIL_REPO` in `app/config.py`) with 
 ```
 
 The analytics card shows the newest two entries.
+
+## Community Corner
+
+- **Vote:** open issues on the profile repo yourself, one per project idea, and give them the label `idea`.
+  Visitors vote with a 👍 reaction; the card shows the live counts.
+- **Ask Me Anything:** visitors open an issue whose title starts with `AMA`. Answer it in a comment; the card
+  shows your latest two answered questions.

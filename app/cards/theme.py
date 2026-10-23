@@ -161,7 +161,10 @@ def sky_phase() -> str:
 
 
 def phase_label(phase: str, location: str = "") -> str:
-    return f"{phase} in {location.split(',')[0]}" if location else phase
+    from .. import config
+
+    place = config.PLACE_NAME or location.split(",")[0].strip()
+    return f"{phase} in {place}" if place else phase
 
 
 def sky(x, y, w, h, phase: str, rx: int = 14, strong: bool = False) -> str:

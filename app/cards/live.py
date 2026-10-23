@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import random
@@ -618,6 +619,49 @@ def coding_dna(commits: list[dict], n: int | None = 8) -> str:
     return svg(W, H, b, title="Coding DNA")
 
 
+# ------------------------------------------------------- community corner
+
+def community(ideas: list[dict], ama: list[dict], n: int | None = 7) -> str:
+    """Visitors vote (👍 on "idea" issues) on what I build next, and the questions I've answered (AMA issues)."""
+    W, H = 850, 262
+    b = frame(W, H)
+    b += heading(24, 20, n, "Vote: What Should I Build Next?", "React 👍 on an idea issue — live votes from GitHub")
+    top = max((i["votes"] for i in ideas), default=0) or 1
+    for i, idea in enumerate(ideas[:4]):
+        y = 84 + i * 40
+        lead = i == 0 and idea["votes"] > 0
+        b += (f'<g class="rise" {d(.3 + i * .1)}>'
+              f'<text x="24" y="{y}" font-size="11.5" font-weight="700" fill="{AMBER if lead else "#c9d1d9"}">'
+              f'{"🏆 " if lead else ""}{esc(trunc(idea["title"], 40))}</text>'
+              f'<text x="494" y="{y}" text-anchor="end" font-size="10.5" class="mono ink" fill="{AMBER}">'
+              f'{idea["votes"]} vote{"s" if idea["votes"] != 1 else ""}</text>'
+              f'<rect x="24" y="{y + 8}" width="470" height="8" rx="4" fill="#1d1712"/>'
+              f'<rect x="24" y="{y + 8}" width="{max(6, 470 * idea["votes"] / top):.0f}" height="8" rx="4" fill="url(#og)" '
+              f'class="grow" filter="url(#glow)" {d(.5 + i * .12)}/></g>')
+    if not ideas:
+        b += (f'<text x="24" y="110" font-size="11" class="muted">Ideas coming soon — open an issue labelled '
+              f'<tspan fill="{AMBER}">idea</tspan> to suggest one.</text>')
+
+    rx = 530
+    b += f'<line x1="{rx - 14}" y1="22" x2="{rx - 14}" y2="{H - 22}" stroke="{BORDER}"/>'
+    b += heading(rx, 20, n + 1 if n is not None else None, "Ask Me Anything", "Open an AMA issue — I answer here")
+    for i, qa in enumerate(ama[:2]):
+        y = 70 + i * 86
+        q_lines, a_lines = wrap(qa["question"], 48, 2), wrap(qa["answer"], 50, 2)
+        b += (f'<g class="rise" {d(.4 + i * .12)}>' + panel(rx, y, 296, 78, 9) +
+              f'<text x="{rx + 12}" y="{y + 17}" font-size="10.5" font-weight="700" fill="{AMBER}">Q</text>'
+              + "".join(f'<text x="{rx + 26}" y="{y + 17 + j * 13}" font-size="10" fill="#c9d1d9">{esc(t)}</text>' for j, t in enumerate(q_lines))
+              + f'<text x="{rx + 12}" y="{y + 49}" font-size="10.5" font-weight="700" fill="{GREEN}">A</text>'
+              + "".join(f'<text x="{rx + 26}" y="{y + 49 + j * 12}" font-size="9.5" class="muted">{esc(t)}</text>' for j, t in enumerate(a_lines))
+              + f'<text x="{rx + 284}" y="{y + 17}" text-anchor="end" font-size="8" class="dim">@{esc(trunc(qa["asker"], 14))}</text></g>')
+    if not ama:
+        b += (f'<g class="fade" {d(.5)}>' + panel(rx, 70, 296, 78, 9) +
+              f'<text x="{rx + 148}" y="104" text-anchor="middle" font-size="11" fill="#c9d1d9">No questions yet —</text>'
+              f'<text x="{rx + 148}" y="122" text-anchor="middle" font-size="11" fill="{AMBER}">be the first to ask!</text></g>')
+    b += synced(24, H - 10, right=False)
+    return svg(W, H, b, title="Community Corner")
+
+
 # ---------------------------------------------------- smart contract lab
 
 SOL_KEYWORDS = {"pragma", "solidity", "contract", "public", "external", "function", "event", "indexed",
@@ -763,9 +807,11 @@ def _streaks(days: list[dict]) -> tuple[int, int]:
     return current, longest
 
 
-def _pet(cx: float, base: float, stage: str, mood: str) -> str:
+def _pet(cx: float, base: float, stage: str, mood: str, extras: frozenset = frozenset()) -> str:
     """The city's coding pet. stage: egg / chick / bird (grows with my best streak);
-    mood: happy / waiting / sad / sleeping (how long since my last contribution)."""
+    mood: happy / waiting / sad / sleeping (how long since my last contribution);
+    extras: what it wears for the weather, festival and time of day (see _pet_extras)."""
+    hx, hy = {"egg": (cx, base - 26), "chick": (cx, base - 23), "bird": (cx + 9, base - 32)}[stage]
     if stage == "egg":
         fx, fy = cx, base - 13
         o = (f'<ellipse cx="{cx}" cy="{base - 13}" rx="10" ry="13" fill="#f3e9d2" stroke="#c9b48a"/>'
@@ -796,7 +842,8 @@ def _pet(cx: float, base: float, stage: str, mood: str) -> str:
         o += f'<circle cx="{fx - 2.5}" cy="{fy}" r="1.4" fill="#1a0d02"/><circle cx="{fx + 3}" cy="{fy}" r="1.4" fill="#1a0d02"/>'
         if mood == "sad":
             o += f'<path d="M{fx - 3},{fy + 1.5}q-1,3 0,4q1,-1 0,-4z" fill="#58a6ff"/>'
-    cls = {"happy": 'class="float" style="animation-duration:.9s"', "sleeping": 'class="pulse" style="animation-duration:4s"'}
+    o += _pet_wear(cx, base, hx, hy, fx, fy, extras)
+    cls ={"happy": 'class="float" style="animation-duration:.9s"', "sleeping": 'class="pulse" style="animation-duration:4s"'}
     out = f'<g {cls.get(mood, "")}>{o}</g>'
     if mood == "happy":
         out += "".join(f'<path d="M{cx + dx},{base - 40 - k * 4}c-2,-3 -6,0 0,4c6,-4 2,-7 0,-4z" fill="#ff5e8a" class="twinkle" '
@@ -807,6 +854,52 @@ def _pet(cx: float, base: float, stage: str, mood: str) -> str:
     return out
 
 
+def _pet_wear(cx, base, hx, hy, fx, fy, extras: frozenset) -> str:
+    o = ""
+    if "holi" in extras:  # splashes of colour
+        o += "".join(f'<circle cx="{cx + dx}" cy="{base + dy}" r="2.6" fill="{c}" fill-opacity=".85"/>'
+                     for dx, dy, c in ((-6, -9, "#ff4fa3"), (4, -5, "#3fd0ff"), (-1, -16, "#ffe14d"), (7, -13, "#5be36a")))
+    if "mask" in extras:  # AQI is bad
+        o += (f'<rect x="{fx - 5.5}" y="{fy + 1.5}" width="11" height="5.5" rx="1.8" fill="#f2f5f9" stroke="#9aa6b8" stroke-width=".6"/>'
+              f'<path d="M{fx - 5.5},{fy + 2.5}l-3,-3M{fx + 5.5},{fy + 2.5}l3,-3" stroke="#9aa6b8" stroke-width=".7"/>')
+    if "santa" in extras:
+        o += (f'<path d="M{hx - 7},{hy + 3}Q{hx},{hy - 14} {hx + 9},{hy - 6}l-2,8z" fill="#e5383b"/>'
+              f'<rect x="{hx - 8}" y="{hy + 1}" width="16" height="4" rx="2" fill="#ffffff"/>'
+              f'<circle cx="{hx + 9}" cy="{hy - 6}" r="2.4" fill="#ffffff"/>')
+    elif "party" in extras:
+        o += (f'<path d="M{hx - 5},{hy + 2}L{hx},{hy - 12}L{hx + 5},{hy + 2}z" fill="#ff4fa3"/>'
+              f'<path d="M{hx - 3},{hy - 3}h6M{hx - 1.5},{hy - 8}h3" stroke="#ffe14d" stroke-width="1.4"/>'
+              f'<circle cx="{hx}" cy="{hy - 12}" r="2" fill="#ffe14d"/>')
+    elif "nightcap" in extras:
+        o += (f'<path d="M{hx - 7},{hy + 3}Q{hx - 2},{hy - 12} {hx + 11},{hy - 2}l-3,5z" fill="#3b5bdb"/>'
+              f'<rect x="{hx - 8}" y="{hy + 1}" width="15" height="3.5" rx="1.7" fill="#dbe4ff"/>'
+              f'<circle cx="{hx + 11}" cy="{hy - 2}" r="2.2" fill="#dbe4ff"/>')
+    if "umbrella" in extras:  # it's raining
+        top = hy - 14
+        o += (f'<path d="M{cx + 16},{top + 6}V{base - 6}q0,4 -4,4" stroke="#c9d1d9" stroke-width="1.3" fill="none"/>'
+              f'<path d="M{cx - 6},{top + 6}Q{cx + 16},{top - 14} {cx + 38},{top + 6}q-5.5,-4 -11,0q-5.5,-4 -11,0q-5.5,-4 -11,0q-5.5,-4 -11,0z" '
+              f'fill="#58a6ff" stroke="#1f6feb" stroke-width=".8"/>')
+    if "diya" in extras:  # a little lamp beside it
+        dx = cx + 20
+        o += (f'<path d="M{dx - 6},{base - 4}q6,7 12,0z" fill="#c2410c" stroke="{AMBER}" stroke-width=".7"/>'
+              f'<ellipse cx="{dx}" cy="{base - 8}" rx="2.2" ry="4.2" fill="#ffd76a" filter="url(#glow)" class="flicker"/>')
+    return o
+
+
+def _pet_extras(phase: str, fest: str | None, weather: dict | None) -> frozenset:
+    extras = set()
+    if weather and (weather.get("aqi") or 0) > 150:
+        extras.add("mask")
+    if weather and weather["kind"] in ("rain", "storm"):
+        extras.add("umbrella")
+    if fest in ("diwali", "gurpurab", "chhath"):
+        extras.add("diya")
+    extras.add({"christmas": "santa", "birthday": "party", "newyear": "party", "holi": "holi"}.get(fest, ""))
+    if phase == "night" and not extras & {"santa", "party"}:
+        extras.add("nightcap")
+    return frozenset(extras - {""})
+
+
 PET_LINES = {
     "happy": "Fed with commits today!",
     "waiting": "Hungry… push a commit?",
@@ -815,7 +908,56 @@ PET_LINES = {
 }
 
 
-def contribution_city(user: dict, calendar: dict, weather: dict | None = None, feeds: dict | None = None) -> str:
+def _constellations(repos: dict | None, x, y, w, h) -> str:
+    """My repos as stars in the night sky: one constellation per top language, each star a repo
+    (brighter with more stars), joined in a line and named after the language."""
+    if not repos:
+        return ""
+    by_lang: dict[str, list[dict]] = {}
+    for r in repos["repos"]:
+        if r["language"]:
+            by_lang.setdefault(r["language"], []).append(r)
+    langs = sorted(by_lang, key=lambda lang: -len(by_lang[lang]))[:3]
+    out = ""
+    slot = w / max(1, len(langs))
+    for i, lang in enumerate(langs):
+        pts = []
+        for r in by_lang[lang][:6]:
+            hb = hashlib.md5(r["name"].encode()).digest()
+            pts.append((x + i * slot + 12 + hb[0] / 255 * (slot - 24), y + 10 + hb[1] / 255 * (h - 10), r))
+        pts.sort(key=lambda p: p[0])
+        if len(pts) > 1:
+            out += (f'<polyline points="{" ".join(f"{px:.0f},{py:.0f}" for px, py, _ in pts)}" stroke="#dfe8ff" '
+                    f'stroke-opacity=".5" stroke-width="1.1"/>')
+        for j, (px, py, r) in enumerate(pts):
+            rad = 2 + min(r["stars"], 5) * .5
+            out += (f'<circle cx="{px:.0f}" cy="{py:.0f}" r="{rad:.1f}" fill="#fff6d8" filter="url(#glow)" class="twinkle" '
+                    f'style="animation-delay:{j * .4:.1f}s"><title>{esc(r["name"])} · {esc(lang)}</title></circle>')
+        out += (f'<text x="{x + i * slot + slot / 2:.0f}" y="{y + 2}" text-anchor="middle" font-size="9" font-style="italic" '
+                f'font-weight="700" fill="#dfe8ff">✦ {esc(lang)}</text>')
+    return out
+
+
+def _traffic(n: int, x0: float, x1: float, road_y: float, night: bool) -> str:
+    """One car per contribution today, driving along the front street."""
+    import random as _r
+
+    rnd = _r.Random(n)
+    out = ""
+    for i in range(min(n, 10)):
+        cx = x0 + rnd.random() * (x1 - x0 - 120)
+        color = rnd.choice(["#e5383b", "#ffd76a", "#58a6ff", "#3fb950", "#f2f5f9", "#bc8cff"])
+        lights = (f'<path d="M{cx + 12},{road_y - 3}l14,-3v6z" fill="#fff3c4" fill-opacity=".35"/>' if night else "")
+        out += (f'<g class="fly" style="animation-duration:{12 + rnd.random() * 10:.1f}s;animation-delay:{-rnd.random() * 20:.1f}s">'
+                f'{lights}<rect x="{cx}" y="{road_y - 6}" width="13" height="5" rx="2" fill="{color}"/>'
+                f'<rect x="{cx + 3}" y="{road_y - 9}" width="6" height="3.5" rx="1.2" fill="{color}" fill-opacity=".8"/>'
+                f'<circle cx="{cx + 3}" cy="{road_y - 1}" r="1.4" fill="#111"/><circle cx="{cx + 10}" cy="{road_y - 1}" r="1.4" fill="#111"/>'
+                f'<circle cx="{cx + 12.5}" cy="{road_y - 4}" r=".9" fill="#fff3c4"/></g>')
+    return out
+
+
+def contribution_city(user: dict, calendar: dict, weather: dict | None = None, feeds: dict | None = None,
+                      repos: dict | None = None) -> str:
     """Last year of contributions as a 3D city: one building per day, under the sky, weather and
     festival of the moment in India, with a coding pet that lives on my streak."""
     phase, fest = sky_phase(), festival_today()
@@ -829,7 +971,8 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
 
     b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase, strong=True)
     if phase == "night":
-        b += stars(380, 60, 450, 60, n=28, seed=4)
+        b += stars(60, 66, 380, 50, n=14, seed=4)
+        b += _constellations(repos, 520, 70, 310, 44)
     if fest != "eid":  # Eid brings its own crescent
         b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in LOW_SUN else 66, phase, r=15)}</g>'
     b += weather_sky(weather, 1, 1, W - 2, 232, seed=calendar["total"])
@@ -913,6 +1056,8 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
             b += (f'<g class="fly" style="animation-duration:{38 + i * 9}s;animation-delay:{-i * 13}s">'
                   f'<path d="M{bx_ - 9},{by_ - 3}h18l-4,5h-10z" fill="#f2f5f9" stroke="#9aa6b8" stroke-width=".6"/>'
                   f'<path d="M{bx_ - 4},{by_ - 3}l4,-8 4,8z" fill="#ffffff" stroke="#9aa6b8" stroke-width=".6"/></g>')
+    if days and not monsoon:  # today's traffic: one car per contribution
+        b += _traffic(days[-1]["count"], x0 + 120, x0 + len(weeks) * sx, ground + 3, phase == "night")
 
     # the coding pet, on the empty lots at the front left
     idle = 0
@@ -929,11 +1074,18 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
             (datetime.now(timezone.utc) - datetime.fromisoformat(feeds["last_at"].replace("Z", "+00:00"))).days < 1:
         mood, line = "happy", f"Thanks @{trunc(feeds['last_by'], 16)} for the cookie!"
     fed = f" · 🍪 fed {feeds['count']}×" if feeds and feeds["count"] else " · feed me 🍪"
+    extras = _pet_extras(phase, fest, weather)
+    # Byte's friends: a little chick joins for every 10 cookies visitors bring
+    for i in range(min(5, (feeds or {}).get("count", 0) // 10)):
+        fx_ = px + 34 + i * 15
+        b += (f'<g class="pop" {d(1.8 + i * .1)}><g transform="translate({fx_},{pbase}) scale(.55) translate({-fx_},{-pbase})">'
+              f'{_pet(fx_, pbase, "chick", "happy" if mood == "happy" else "waiting")}</g></g>')
     bw_ = len(line) * 5.3 + 18
-    b += (f'<g class="pop" {d(1.6)}>{_pet(px, pbase, stage, mood)}'
-          f'<rect x="{px + 22}" y="{pbase - 66}" width="{bw_:.0f}" height="20" rx="10" fill="#ffffff" fill-opacity=".92"/>'
-          f'<path d="M{px + 30},{pbase - 47}l-6,8 12,-8z" fill="#ffffff" fill-opacity=".92"/>'
-          f'<text x="{px + 22 + bw_ / 2:.0f}" y="{pbase - 52}" text-anchor="middle" font-size="9.5" font-weight="700" '
+    by_ = pbase - (82 if "umbrella" in extras else 66)
+    b += (f'<g class="pop" {d(1.6)}>{_pet(px, pbase, stage, mood, extras)}'
+          f'<rect x="{px + 22}" y="{by_}" width="{bw_:.0f}" height="20" rx="10" fill="#ffffff" fill-opacity=".92"/>'
+          f'<path d="M{px + 30},{by_ + 19}l-6,8 12,-8z" fill="#ffffff" fill-opacity=".92"/>'
+          f'<text x="{px + 22 + bw_ / 2:.0f}" y="{by_ + 14}" text-anchor="middle" font-size="9.5" font-weight="700" '
           f'fill="#1a0d02">{esc(line)}</text>'
           f'<text x="{px}" y="{pbase + 14}" text-anchor="middle" font-size="8" class="dim">'
           f'{esc(config.PET_NAME)} · {stage}{esc(fed)}</text></g>')
