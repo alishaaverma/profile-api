@@ -111,7 +111,7 @@ def _terminal_lines(c: dict) -> list[str]:
 # ---------------------------------------------------------------- hero
 
 def hero(user: dict, ctx: dict | None = None, views: int | None = None) -> str:
-    """views: profile views so far (github.get_profile_views); the pill is left out when unknown."""
+    """views: profile views so far (github.get_profile_views); the pill is left out when unknown or 0."""
     c = _ctx(user, ctx)
     W, H = 850, 330
     phase, fest = sky_phase(), festival_today()
@@ -207,7 +207,7 @@ def hero(user: dict, ctx: dict | None = None, views: int | None = None) -> str:
     stats = (f"{user['public_repos']} repos  ·  {compact(user['followers'])} followers  ·  "
              f"{compact(user['following'])} following")
     b += f'<text x="{nx + nw / 2}" y="256" text-anchor="middle" font-size="11" class="mono ink fade" fill="#c9d1d9" {d(1.3)}>{esc(stats)}</text>'
-    if views is not None:
+    if views:  # hidden until the counter has its first view
         label = f"Profile viewed {views:,} times"
         pw = len(label) * 6.4 + 46
         px = nx + (nw - pw) / 2
