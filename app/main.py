@@ -46,21 +46,30 @@ async def _render(fn):
         return _error_card(str(e))
 
 
+async def _context(login: str) -> tuple[dict, dict]:
+    """(user, live profile context) for the cards that describe me."""
+    user, repos, tech, cal, til = await asyncio.gather(
+        gh.get_user(login), gh.get_repos(login), gh.get_tech(login), gh.get_calendar(login), gh.get_til(login))
+    building = await gh.get_now_building(login, repos)
+    return user, prof.context(user, repos, tech, cal, building, til)
+
+
 # -------------------------------------------------------------- cards
 
 @app.get("/card/hero")
 async def card_hero(username: str | None = None):
     async def f():
-        user, festivals = await asyncio.gather(gh.get_user(_user(username)), gh.get_festival_dates())
+        (user, ctx), festivals = await asyncio.gather(_context(_user(username)), gh.get_festival_dates())
         set_festival_dates(festivals)
-        return prof.hero(user)
+        return prof.hero(user, ctx)
     return await _render(f)
 
 
 @app.get("/card/about")
 async def card_about(username: str | None = None, n: int = 2):
     async def f():
-        return prof.about(await gh.get_user(_user(username)), n)
+        user, ctx = await _context(_user(username))
+        return prof.about(user, n, ctx)
     return await _render(f)
 
 
@@ -72,7 +81,19 @@ async def card_city(username: str | None = None):
             gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates(), gh.get_weather(),
             gh.get_byte_feeds(login), gh.get_repos(login))
         set_festival_dates(festivals)
-        return live.contribution_city(user, cal, weather, feeds, repos)
+        building = await gh.get_now_building(login, repos)
+        return live.contribution_city(user, cal, weather, feeds, repos, building)
+    return await _render(f)
+
+
+@app.get("/card/tldr")
+async def card_tldr(username: str | None = None):
+    async def f():
+        login = _user(username)
+        user, stats, cal, repos, tech = await asyncio.gather(
+            gh.get_user(login), gh.get_stats(login), gh.get_calendar(login), gh.get_repos(login), gh.get_tech(login))
+        building, til = await asyncio.gather(gh.get_now_building(login, repos), gh.get_til(login))
+        return prof.tldr(user, stats, cal, repos, tech, prof.context(user, repos, tech, cal, building, til))
     return await _render(f)
 
 
@@ -110,8 +131,11 @@ async def card_tech(username: str | None = None, n: int = 3):
 
 
 @app.get("/card/what-i-build")
-async def card_build(n: int = 4):
-    return await _render(lambda: asyncio.sleep(0, prof.what_i_build(n)))
+async def card_build(username: str | None = None, n: int = 10):
+    async def f():
+        _, ctx = await _context(_user(username))
+        return prof.what_i_build(n, ctx)
+    return await _render(f)
 
 
 @app.get("/card/heading")
@@ -225,7 +249,8 @@ async def card_coding_dna(username: str | None = None, n: int = 8):
 @app.get("/card/collaborate")
 async def card_collaborate(username: str | None = None, n: int = 21):
     async def f():
-        return prof.collaborate(await gh.get_user(_user(username)), n)
+        user, ctx = await _context(_user(username))
+        return prof.collaborate(user, n, ctx)
     return await _render(f)
 
 

@@ -45,7 +45,8 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes, a flooded street with paper boats when it rains, and Byte, a coding pet that grows with your best streak, sulks when you stop committing counts the cookies visitors feed it (a friend chick joins every 10), and dresses for the moment: mask when the AQI is bad, umbrella in rain, Santa hat, party hat, diya, nightcap. At night your repos shine as constellations, and one car drives the street per contribution today |
+| `/card/tldr` | one-line recruiter summary: role, place, open to work, contributions this year, tools in use now |
+| `/card/city` | Contribution City: the last year as a 3D city (one building per day), streaks, live weather + AQI, festival themes, a flooded street with paper boats when it rains, and Byte, a coding pet that grows with your best streak, sulks when you stop committing counts the cookies visitors feed it (a friend chick joins every 10), and dresses for the moment: mask when the AQI is bad, umbrella in rain, Santa hat, party hat, diya, nightcap. At night your repos shine as constellations, and one car drives the street per contribution today. Byte writes a one-line diary from the day's data; heatwaves (38°C+) make the air shimmer and bring out an ice-cream, cold days (10°C or less) a muffler and chimney smoke |
 | `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
 | `/card/smart-contracts` | Smart Contract Lab: a live `Profile.sol`, Solidity repos and detected Web3 tools |
 | `/card/now-building` | most recently pushed repo, its latest commit and 30-day commit momentum |

@@ -8,12 +8,16 @@ Everything below is your own static content - edit it freely.
 
 import os
 
-GITHUB_USERNAME = os.getenv("GITHUB_USERNAME", "alishaaverma")
+GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 # Seconds that GitHub's image proxy / CDN may cache a card. Lower = fresher.
-CACHE_SECONDS = int(os.getenv("CACHE_SECONDS", "1800"))
+CACHE_SECONDS = int(os.getenv("CACHE_SECONDS"))
 
+# PROFILE is now only a fallback: the cards take the role from your GitHub bio, "open to work"
+# from the "Available for hire" checkbox, and the tagline, chips, terminal lines, about text,
+# capabilities, highlights, what-I-build and services from your repos (see cards/profile.py:context).
+# These values are used only when GitHub has nothing to say (e.g. no bio, nothing detected yet).
 PROFILE = {
     # Leave empty to use the live name from GitHub.
     "name": os.getenv("PROFILE_NAME", ""),
@@ -31,7 +35,7 @@ PROFILE = {
         "with clean code, scalable architecture and user-focused design."
     ),
     # Set to a number to override; None = years since GitHub account creation.
-    "years_experience": None,
+    "years_experience": "2 Years",
     "available": True,
     "chips": ["Frontend", "Backend", "APIs", "Databases", "Cloud", "Web3"],
     "highlight_chips": ["Web3"],  # glow in the Solidity purple

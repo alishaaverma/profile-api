@@ -69,7 +69,13 @@ def architecture(tech: dict, n: int = 6) -> str:
     b += _box(dx, 66, 160, 64, A["database"][0], A["database"][1:], delay=.5)
     b += _box(dx, 174, 160, 64, A["cloud"][0], A["cloud"][1:], delay=.6, accent=BLUE)
     b += panel(676, 66, 150, 172, 10)
-    b += bullet_list(686, 92, A["features"][:6], gap=26, size=9.8, delay=.6)
+    # live facts about how my repos are built; config text only if nothing is detected
+    facts = [(gh.tech_repos(tech, "github-actions"), "with CI/CD"), (gh.tech_count(tech, "Docker"), "Dockerized"),
+             (gh.tech_count(tech, "REST API"), "with REST APIs"), (gh.tech_count(tech, "Solidity"), "smart contracts"),
+             (gh.tech_count(tech, "AWS"), "on AWS"), (len(tech.get("languages") or {}), "languages")]
+    features = [f"{k} {'repo' if k == 1 else 'repos'} {label}" if label != "languages" else f"{k} languages in use"
+                for k, label in facts if k] or A["features"]
+    b += bullet_list(686, 92, features[:6], gap=26, size=9.8, delay=.6)
     b += synced(826, 252)
     return svg(W, H, b, title="System Architecture")
 

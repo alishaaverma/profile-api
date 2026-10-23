@@ -115,10 +115,27 @@ async def get_user(login: str) -> dict:
             "following": u.get("following", 0),
             "public_repos": u.get("public_repos", 0),
             "created_at": u.get("created_at"),
+            "hireable": u.get("hireable"),       # the "Available for hire" checkbox; None if unset
+            "email": u.get("email") or "",       # public email, if shown on the profile
+            "blog": u.get("blog") or "",         # the Website field
+            "twitter": u.get("twitter_username") or "",
             "latency_ms": latency,
         }
 
     return await _cached(f"user:{login}", load)
+
+
+async def get_socials(login: str) -> list[dict]:
+    """Social accounts on my GitHub profile: [{'provider': 'linkedin', 'url': ...}]."""
+
+    async def load():
+        try:
+            return [{"provider": s.get("provider", ""), "url": s.get("url", "")}
+                    for s in await _get(f"/users/{login}/social_accounts")]
+        except GitHubError:
+            return []
+
+    return await _cached(f"socials:{login}", load)
 
 
 # -------------------------------------------------------------------- repos

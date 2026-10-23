@@ -436,6 +436,8 @@ WEATHER_CSS = (
     ".flash{opacity:0;animation:flash 6s linear infinite}"
     "@keyframes haze{0%,100%{transform:translateX(-30px)}50%{transform:translateX(30px)}}"
     ".haze{animation:haze 18s ease-in-out infinite}"
+    "@keyframes smoke{0%{transform:translate(0,0);opacity:0}20%{opacity:.6}100%{transform:translate(8px,-34px);opacity:0}}"
+    ".smoke{opacity:0;animation:smoke 3.4s ease-out infinite}"
 )
 AQI_COLORS = [(50, GREEN), (100, "#d4c62a"), (150, ORANGE), (200, "#ff5e5e"), (300, "#b36bff"), (10_000, "#a0304a")]
 

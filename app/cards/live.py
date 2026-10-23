@@ -719,9 +719,9 @@ def smart_contract_lab(user: dict, repos: dict, tech: dict, n: int | None = 4) -
         "pragma solidity ^0.8.24;",
         "",
         f"contract {ident} {{",
-        f'    string public role = "{config.PROFILE["role"]}";',
+        f'    string public role = "{trunc(user.get("bio") or config.PROFILE["role"], 30)}";',
         f"    uint256 public solidityRepos = {len(sol)};",
-        f"    bool public openToWork = {'true' if config.PROFILE.get('available') else 'false'};",
+        f"    bool public openToWork = {'true' if (config.PROFILE.get('available') if user.get('hireable') is None else user['hireable']) else 'false'};",
         "",
         "    event Hired(address indexed by);",
         "",
@@ -854,6 +854,9 @@ def _pet(cx: float, base: float, stage: str, mood: str, extras: frozenset = froz
     return out
 
 
+HOT, COLD = 38, 10  # °C: heatwave shimmer + ice-cream / chimney smoke + muffler
+
+
 def _pet_wear(cx, base, hx, hy, fx, fy, extras: frozenset) -> str:
     o = ""
     if "holi" in extras:  # splashes of colour
@@ -879,6 +882,14 @@ def _pet_wear(cx, base, hx, hy, fx, fy, extras: frozenset) -> str:
         o += (f'<path d="M{cx + 16},{top + 6}V{base - 6}q0,4 -4,4" stroke="#c9d1d9" stroke-width="1.3" fill="none"/>'
               f'<path d="M{cx - 6},{top + 6}Q{cx + 16},{top - 14} {cx + 38},{top + 6}q-5.5,-4 -11,0q-5.5,-4 -11,0q-5.5,-4 -11,0q-5.5,-4 -11,0z" '
               f'fill="#58a6ff" stroke="#1f6feb" stroke-width=".8"/>')
+    if "muffler" in extras:  # cold
+        o += (f'<path d="M{fx - 8},{fy + 6}q8,4 16,0v3.5q-8,4 -16,0z" fill="#e5383b"/>'
+              f'<path d="M{fx + 4},{fy + 9}l2,9h-4z" fill="#e5383b"/>'
+              f'<path d="M{fx - 6},{fy + 7}v3M{fx - 2},{fy + 8}v3M{fx + 2},{fy + 8}v3" stroke="#ffffff" stroke-width="1"/>')
+    if "icecream" in extras:  # heatwave
+        ix = cx - 17
+        o += (f'<path d="M{ix - 4},{base - 18}l4,12 4,-12z" fill="#d9a066" stroke="#a8743c" stroke-width=".6"/>'
+              f'<circle cx="{ix}" cy="{base - 20}" r="4.5" fill="#ff9ec4"/><circle cx="{ix + 1}" cy="{base - 25}" r="3.5" fill="#fff3c4"/>')
     if "diya" in extras:  # a little lamp beside it
         dx = cx + 20
         o += (f'<path d="M{dx - 6},{base - 4}q6,7 12,0z" fill="#c2410c" stroke="{AMBER}" stroke-width=".7"/>'
@@ -892,6 +903,10 @@ def _pet_extras(phase: str, fest: str | None, weather: dict | None) -> frozenset
         extras.add("mask")
     if weather and weather["kind"] in ("rain", "storm"):
         extras.add("umbrella")
+    if weather and weather["temp"] >= HOT:
+        extras.add("icecream")
+    if weather and weather["temp"] <= COLD:
+        extras.add("muffler")
     if fest in ("diwali", "gurpurab", "chhath"):
         extras.add("diya")
     extras.add({"christmas": "santa", "birthday": "party", "newyear": "party", "holi": "holi"}.get(fest, ""))
@@ -956,8 +971,44 @@ def _traffic(n: int, x0: float, x1: float, road_y: float, night: bool) -> str:
     return out
 
 
+def _diary(user: dict, days: list[dict], idle: int, weather: dict | None, fest: str | None, fed_by: str,
+           building: dict | None, phase: str) -> str:
+    """Byte's one-line diary for today, written from the live data."""
+    first = (user.get("name") or user["login"]).split()[0]
+    n = days[-1]["count"] if days else 0
+    repo = ""
+    if building and building["repo"].get("pushed_at"):
+        pushed = datetime.fromisoformat(building["repo"]["pushed_at"].replace("Z", "+00:00"))
+        if (datetime.now(timezone.utc) - pushed).days < 1:
+            repo = building["repo"]["name"]
+    if n:
+        first_line = f"{first} made {n} contribution{'s' if n != 1 else ''} today" + (f" to {repo}" if repo else "") + "."
+    elif idle <= 1:
+        first_line = f"No code from {first} yet today, I'm waiting."
+    else:
+        first_line = f"{idle} days since {first} last coded. I miss it."
+    w = weather or {}
+    if fest:
+        second = f"{FESTIVALS[fest][0]}!"
+    elif fed_by:
+        second = f"@{fed_by} brought me a cookie 🍪"
+    elif (w.get("aqi") or 0) > 150:
+        second = f"AQI {w['aqi']} outside, mask on 😷"
+    elif w.get("kind") in ("rain", "storm"):
+        second = "Rainy day, umbrella out ☂"
+    elif w and w["temp"] >= HOT:
+        second = f"{w['temp']}°C, ice-cream time 🍦"
+    elif w and w["temp"] <= COLD:
+        second = f"{w['temp']}°C, muffler on 🧣"
+    elif phase == "night":
+        second = "Counting my repo stars ✨"
+    else:
+        second = f"{w.get('words', 'nice weather').capitalize()} outside."
+    return f"{first_line} {second}"
+
+
 def contribution_city(user: dict, calendar: dict, weather: dict | None = None, feeds: dict | None = None,
-                      repos: dict | None = None) -> str:
+                      repos: dict | None = None, building: dict | None = None) -> str:
     """Last year of contributions as a 3D city: one building per day, under the sky, weather and
     festival of the moment in India, with a coding pet that lives on my streak."""
     phase, fest = sky_phase(), festival_today()
@@ -1012,6 +1063,7 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
                   f'class="pulse" style="animation-delay:{wr.random() * 2:.1f}s"/>')
     rnd = random.Random(calendar["total"])
     today = days[-1]["date"] if days else ""
+    roofs = []  # (x, top, height) of every building
     blocks = []
     for wi, week in enumerate(weeks):
         for day in week:
@@ -1041,7 +1093,20 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
             o += f'<circle cx="{bx + bw / 2 + ox / 2:.1f}" cy="{t - ox - 3:.1f}" r="2.2" fill="#ff4d4d" class="pulse" filter="url(#glow)"/>'
         if day is peak:
             peak_xy = (bx + bw / 2 + ox / 2, t - ox)
+        roofs.append((bx + bw / 2 + ox / 2, t - ox, h))
         b += o + "</g>"
+
+    temp = weather["temp"] if weather else 20
+    if temp <= COLD:  # winter: smoke curls up from the tallest chimneys
+        for i, (rx_, ry_, _) in enumerate(sorted(roofs, key=lambda r: -r[2])[:4]):
+            b += f'<rect x="{rx_ - 1.5:.1f}" y="{ry_ - 5:.1f}" width="3" height="5" fill="#46200b"/>'
+            b += "".join(f'<circle cx="{rx_:.1f}" cy="{ry_ - 8:.1f}" r="{2.5 + k}" fill="#c9d1d9" fill-opacity=".45" class="smoke" '
+                         f'style="animation-delay:{i * .7 + k * 1.1:.1f}s"/>' for k in range(3))
+    if temp >= HOT:  # heatwave: the air shimmers above the street
+        for i in range(4):
+            yy = 150 + i * 20
+            b += (f'<g class="haze" style="animation-delay:{-i * 4}s"><path d="M30,{yy} q25,-5 50,0 t50,0 t50,0 t50,0 t50,0 t50,0 t50,0 '
+                  f't50,0 t50,0 t50,0 t50,0 t50,0 t50,0 t50,0 t50,0 t50,0" stroke="{AMBER}" stroke-opacity=".22" stroke-width="1.4"/></g>')
 
     if peak["count"]:
         px, py = peak_xy
@@ -1070,9 +1135,14 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
     px, pbase = x0 + 70, ground - 2
     line = PET_LINES[mood].format(days=idle)
     # a visitor's cookie (a "Feed Byte" issue) in the last day cheers Byte up
+    fed_by = ""
     if feeds and feeds["last_at"] and \
             (datetime.now(timezone.utc) - datetime.fromisoformat(feeds["last_at"].replace("Z", "+00:00"))).days < 1:
-        mood, line = "happy", f"Thanks @{trunc(feeds['last_by'], 16)} for the cookie!"
+        fed_by = feeds["last_by"]
+        mood, line = "happy", f"Thanks @{trunc(fed_by, 16)} for the cookie!"
+    diary = wrap(f"📔 {config.PET_NAME}'s diary: {_diary(user, days, idle, weather, fest, fed_by, building, phase)}", 62, 2)
+    b += "".join(f'<text x="24" y="{78 + i * 13}" font-size="10" font-style="italic" fill="#e6edf3" fill-opacity=".9" '
+                 f'class="fade" {d(1)}>{esc(line_)}</text>' for i, line_ in enumerate(diary))
     fed = f" · 🍪 fed {feeds['count']}×" if feeds and feeds["count"] else " · feed me 🍪"
     extras = _pet_extras(phase, fest, weather)
     # Byte's friends: a little chick joins for every 10 cookies visitors bring

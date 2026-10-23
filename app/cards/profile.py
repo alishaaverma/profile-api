@@ -9,7 +9,7 @@ from .. import github as gh
 from .theme import (AMBER, BLUE, BORDER, CARD2, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, LOW_SUN, MUTED, ORANGE,
                     SKIES, TEXT, bullet_list, celestial, compact, count_badge, cube, d, dot, esc, festival_ground,
                     festival_sky, festival_today, frame, heading, ist_now, panel, phase_label, sky, sky_phase, skyline, stars, svg,
-                    synced, wrap)
+                    synced, trunc, wrap)
 
 P = config.PROFILE
 
@@ -21,13 +21,99 @@ def _years(user: dict) -> int:
     return max(1, (datetime.now(timezone.utc) - created).days // 365)
 
 
+# ---------------------------------------------------------- live context
+
+# TECH_STACK category -> (chip, what I build, service I offer)
+CATEGORY_WORDS = {
+    "Frontend": ("Frontend", "Web Frontends", "Web Applications"),
+    "Backend": ("Backend", "Backends & APIs", "Backend & REST APIs"),
+    "Database": ("Databases", "Data Layers", "Database Design"),
+    "Cloud & DevOps": ("Cloud", "Cloud & DevOps", "Cloud Deployment"),
+    "CMS & Tools": ("CMS", "CMS Websites", "WordPress Websites"),
+    "Blockchain": ("Web3", "Smart Contracts", "Smart Contracts"),
+}
+
+
+def context(user: dict, repos: dict, tech: dict, calendar: dict | None = None, building: dict | None = None,
+            til: list[dict] | None = None) -> dict:
+    """Everything the profile cards say about me, worked out from GitHub instead of config.py.
+    config.PROFILE only fills in what GitHub can't tell (e.g. no bio set yet)."""
+    from .live import WEB3_TOOLS, exploring
+
+    star = lambda name: config.TECH_ALIASES.get(name) == ["*"]
+    # category -> [(label, lookup key for tech_repo_names)]
+    keys = {cat: [(name, name) for name, _, _ in items if not star(name)] for cat, items in config.TECH_STACK.items()}
+    keys["Blockchain"] = [("Solidity", "Solidity")] + list(WEB3_TOOLS)
+    by_name = {r["name"]: r for r in repos["repos"]}
+    groups, counts = {}, {}
+    for cat, pairs in keys.items():
+        names, used = set(), []
+        for label, key in pairs:
+            found = gh.tech_repo_names(tech, key)
+            if found:
+                used.append((label, len(found)))
+                counts[label] = max(counts.get(label, 0), len(found))
+                names |= set(found)
+        rs = [by_name[n] for n in names if n in by_name]
+        newest = max(rs, key=lambda r: r.get("created_at") or "")["name"] if rs else ""
+        groups[cat] = {"repos": len(rs), "newest": newest, "tools": [t for t, _ in sorted(used, key=lambda t: -t[1])]}
+    tools = sorted(counts.items(), key=lambda t: -t[1])
+    days = sorted((d_ for w in calendar["weeks"] for d_ in w), key=lambda x: x["date"]) if calendar else []
+    hireable = user.get("hireable")
+    return {
+        "role": user.get("bio") or P["role"],
+        "available": P.get("available") if hireable is None else bool(hireable),
+        "place": config.PLACE_NAME or (user.get("location") or "").split(",")[0].strip(),
+        "tools": tools,                                   # [(tool, repos)], most used first
+        "groups": groups,                                 # category -> repos, newest, tools
+        "languages": [lang for lang, _ in repos["languages"]],
+        "exploring": [name for name, _, _ in exploring(repos, tech)],
+        "building": building["repo"]["name"] if building else "",
+        "last30": sum(d_["count"] for d_ in days[-30:]),
+        "contributions": calendar["total"] if calendar else 0,
+        "til": til[0]["text"] if til else "",
+    }
+
+
+def _ctx(user: dict, ctx: dict | None) -> dict:
+    """ctx, or a config-only stand-in when a card is rendered without live context."""
+    if ctx:
+        return ctx
+    hireable = user.get("hireable")
+    return {"role": user.get("bio") or P["role"], "available": P.get("available") if hireable is None else bool(hireable),
+            "place": config.PLACE_NAME or (user.get("location") or "").split(",")[0].strip(), "tools": [], "groups": {},
+            "languages": [], "exploring": [], "building": "", "last30": 0, "contributions": 0, "til": ""}
+
+
+def _tagline(user: dict, c: dict) -> str:
+    if not c["tools"]:
+        return P["tagline"]
+    tools = [t for t, _ in c["tools"][:3]]
+    line = (f"I build with {', '.join(tools[:-1])} and {tools[-1]}" if len(tools) > 1 else f"I build with {tools[0]}")
+    line += f" — {user['public_repos']} public repos and {c['contributions']} contributions in the last year"
+    return line + (f", currently shipping {c['building']}." if c["building"] else ".")
+
+
+def _terminal_lines(c: dict) -> list[str]:
+    if not c["tools"]:
+        return P["terminal_lines"]
+    lines = [f"Building {c['building']}" if c["building"] else "Building web applications",
+             f"{c['last30']} contributions in 30 days",
+             f"Exploring {', '.join(c['exploring'][:2])}" if c["exploring"] else f"Using {c['tools'][0][0]}",
+             f"TIL: {c['til']}" if c["til"] else f"{len(c['languages'])} languages, {len(c['tools'])} tools",
+             "Open to collaboration" if c["available"] else "Heads-down shipping"]
+    return [trunc(line_, 34) for line_ in lines]
+
+
 # ---------------------------------------------------------------- hero
 
-def hero(user: dict) -> str:
+def hero(user: dict, ctx: dict | None = None) -> str:
+    c = _ctx(user, ctx)
     W, H = 850, 330
     phase, fest = sky_phase(), festival_today()
-    b = frame(W, H) + sky(1, 1, W - 2, H - 2, phase)
-    # sky for the current time (and festival) in India + skyline behind the right column
+    # the whole background is the sky for the time of day in India, like Contribution City
+    b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase, strong=True)
+    # festival extras + skyline behind the right column
     b += f'<circle cx="690" cy="300" r="140" fill="{SKIES[phase][1]}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
     if phase == "night":
         b += stars(412, 10, 130, 200, n=22, seed=11)
@@ -48,12 +134,14 @@ def hero(user: dict) -> str:
                 "night": "Shubh Ratri 🌙"}[phase]
     b += f'<text x="34" y="56" font-size="17" class="muted rise">{greeting} — I\'m</text>'
     b += f'<text x="32" y="102" font-size="44" font-weight="800" class="rise" {d(.15)} filter="url(#glow)">{name}</text>'
-    b += f'<text x="34" y="134" font-size="19" font-weight="600" class="rise" {d(.3)}>{esc(P["role"])}</text>'
-    for i, line in enumerate(wrap(P["tagline"], 66, 3)):
+    b += f'<text x="34" y="134" font-size="19" font-weight="600" class="rise" {d(.3)}>{esc(c["role"])}</text>'
+    for i, line in enumerate(wrap(_tagline(user, c), 66, 3)):
         b += f'<text x="34" y="{162 + i * 17}" font-size="12.5" class="muted rise" {d(.45 + i * .08)}>{esc(line)}</text>'
 
+    # one chip per area my repos actually cover
+    chips = [CATEGORY_WORDS[cat][0] for cat, g in c["groups"].items() if g["repos"]][:6] or P["chips"]
     x = 34
-    for i, chip in enumerate(P["chips"]):
+    for i, chip in enumerate(chips):
         w = len(chip) * 6.6 + 22
         hot = chip in P.get("highlight_chips", [])
         b += (f'<g class="pop" {d(.7 + i * .08)}><rect x="{x}" y="222" width="{w:.0f}" height="24" rx="6" '
@@ -63,7 +151,7 @@ def hero(user: dict) -> str:
               f'font-weight="{700 if hot else 400}">{esc(chip)}</text></g>')
         x += w + 8
 
-    status = "Available for new opportunities" if P.get("available") else "Currently busy building"
+    status = "Available for new opportunities" if c["available"] else "Currently busy building"
     meta = [status]
     if user.get("location"):
         meta.append(user["location"])
@@ -82,18 +170,19 @@ def hero(user: dict) -> str:
     # terminal
     tx, ty, tw, th = 548, 24, 276, 152
     b += f'<g class="rise" {d(.3)}>' + panel(tx, ty, tw, th, 10, stroke="#2b3646", fill="#0a0e15")
-    for i, c in enumerate(("#ff5f56", "#ffbd2e", "#27c93f")):
-        b += f'<circle cx="{tx + 14 + i * 13}" cy="{ty + 13}" r="4" fill="{c}"/>'
+    for i, dot_color in enumerate(("#ff5f56", "#ffbd2e", "#27c93f")):
+        b += f'<circle cx="{tx + 14 + i * 13}" cy="{ty + 13}" r="4" fill="{dot_color}"/>'
     b += f'<text x="{tx + tw - 12}" y="{ty + 17}" text-anchor="end" font-size="9.5" class="dim mono">bash</text>'
     b += f'<line x1="{tx}" y1="{ty + 26}" x2="{tx + tw}" y2="{ty + 26}" stroke="#1d2633"/>'
     prompt = f"{user['login']}@dev:~$"
     b += (f'<text x="{tx + 12}" y="{ty + 46}" font-size="11" class="mono type" {d(.6)}>'
           f'<tspan fill="{GREEN}">{esc(prompt)}</tspan><tspan fill="{TEXT}"> cat focus.txt</tspan></text>')
-    for i, line in enumerate(P["terminal_lines"][:5]):
+    lines = _terminal_lines(c)[:5]
+    for i, line in enumerate(lines):
         b += (f'<text x="{tx + 12}" y="{ty + 68 + i * 18}" font-size="11" class="mono fade" {d(1.6 + i * .35)}>'
               f'<tspan fill="{ORANGE}">&gt; </tspan><tspan fill="#c9d1d9">{esc(line)}</tspan></text>')
-    last_y = ty + 68 + (min(5, len(P["terminal_lines"])) - 1) * 18
-    end_x = tx + 12 + (len(P["terminal_lines"][-1]) + 2) * 6.65
+    last_y = ty + 68 + (len(lines) - 1) * 18
+    end_x = tx + 12 + (len(lines[-1]) + 2) * 6.65
     b += f'<rect x="{end_x:.0f}" y="{last_y - 10}" width="7" height="13" fill="{ORANGE}" class="blink"/></g>'
 
     # neon sign
@@ -116,16 +205,71 @@ def hero(user: dict) -> str:
 
     css = ("@keyframes neon{0%,100%{opacity:.3}8%,22%{opacity:1}34%{opacity:.3}}.neon{opacity:.3;animation:neon 4.5s ease-in-out infinite}"
            + FESTIVAL_CSS)
-    return svg(W, H, b, css, title=f"{user['name']} - {P['role']}")
+    return svg(W, H, b, css, title=f"{user['name']} - {c['role']}", light=False)
+
+
+# ----------------------------------------------------------------- tl;dr
+
+def tldr(user: dict, stats: dict, calendar: dict, repos: dict, tech: dict, ctx: dict | None = None) -> str:
+    """One strip a recruiter can read in five seconds, all from GitHub."""
+    from .live import exploring
+
+    c = _ctx(user, ctx)
+    W, H = 850, 58
+    b = (f'<rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="12" fill="url(#bgg)" stroke="{ORANGE}" stroke-opacity=".45"/>'
+         f'<rect x="1" y="1" width="{W - 2}" height="{H - 2}" rx="12" fill="url(#grid)"/>')
+    b += (f'<g class="pop"><rect x="14" y="15" width="54" height="28" rx="7" fill="url(#og)"/>'
+          f'<text x="41" y="34" text-anchor="middle" font-size="12.5" font-weight="900" fill="#1a0d02">TL;DR</text></g>')
+    stack = [name for name, _, _ in exploring(repos, tech)[:3]] or ["Python", "React", "Solidity"]
+    place = c["place"]
+    facts = [
+        (c["role"].replace(" Software", "") + (" + Solidity" if "Solidity" in stack else ""), TEXT),
+        (f"📍 {place}", "#c9d1d9") if place else None,
+        ("🟢 Open to work" if c["available"] else "🔴 Busy building", GREEN if c["available"] else "#ff7b72"),
+        (f"{calendar['total']} contributions this year", "#c9d1d9"),
+        ("Now: " + ", ".join(stack[:2]), AMBER),
+    ]
+    x = 80
+    for i, fact in enumerate(f for f in facts if f):
+        text, color = fact
+        if i:
+            b += f'<text x="{x - 9}" y="33" font-size="12" class="dim">·</text>'
+        b += (f'<text x="{x}" y="33" font-size="10.5" font-weight="{700 if i == 0 else 500}" fill="{color}" class="fade" '
+              f'{d(.1 + i * .1)}>{esc(text)}</text>')
+        x += len(text) * 5.7 + 16
+    return svg(W, H, b, title="TL;DR")
 
 
 # ---------------------------------------------------------------- about
 
-def about(user: dict, n: int = 2) -> str:
-    W, H = 850, 300
-    b = frame(W, H) + heading(24, 20, n, "About Me", P["about_subtitle"])
+CATEGORY_ORDER = ["Frontend", "Backend", "Database", "Cloud & DevOps", "CMS & Tools", "Blockchain"]
+CATEGORY_SHORT = {"Cloud & DevOps": "Cloud", "CMS & Tools": "CMS"}
 
-    for i, line in enumerate(wrap(P["about"], 46, 7)):
+
+def _about_text(user: dict, c: dict) -> str:
+    if not c["tools"]:
+        return P["about"]
+    first = (user.get("name") or user["login"]).split()[0]
+    langs = c["languages"][:3]
+    areas = [CATEGORY_SHORT.get(cat, cat).lower() for cat in CATEGORY_ORDER if c["groups"].get(cat, {}).get("repos")]
+    text = (f"I'm {first}, a {c['role'].lower()}" + (f" from {c['place']}" if c["place"] else "") + ". "
+            f"In {_years(user)} years on GitHub I've published {user['public_repos']} public repositories"
+            + (f", mostly in {', '.join(langs[:-1])} and {langs[-1]}" if len(langs) > 1 else "") + ". ")
+    if areas:
+        text += f"I work across {', '.join(areas[:-1])} and {areas[-1]}. " if len(areas) > 1 else f"I work on {areas[0]}. "
+    if c["building"]:
+        text += f"Right now I'm building {c['building'].replace('-', ' ').replace('_', ' ')}."
+    return text
+
+
+def about(user: dict, n: int = 2, ctx: dict | None = None) -> str:
+    c = _ctx(user, ctx)
+    W, H = 850, 300
+    subtitle = (f"{c['role']} · {c['place']} · {len(c['languages'])} languages · {len(c['tools'])} tools" if c["tools"]
+                else P["about_subtitle"])
+    b = frame(W, H) + heading(24, 20, n, "About Me", subtitle)
+
+    for i, line in enumerate(wrap(_about_text(user, c), 46, 7)):
         b += f'<text x="24" y="{88 + i * 18}" font-size="12" fill="#c9d1d9" class="rise" {d(.2 + i * .06)}>{esc(line)}</text>'
     facts = []
     if user.get("location"):
@@ -138,12 +282,12 @@ def about(user: dict, n: int = 2) -> str:
     b += synced(24, 284, right=False)
 
     # stats
-    tech_count = sum(len(v) for v in config.TECH_STACK.values())
+    tech_count = len(c["tools"]) or sum(len(v) for v in config.TECH_STACK.values())
     stats = [
         (f"{_years(user)}+", "Years", "Coding"),
         (str(user["public_repos"]), "Public", "Projects"),
-        (f"{tech_count}+", "Tech", "Mastered"),
-        ("Open" if P.get("available") else "Busy", "To New", "Opportunities"),
+        (str(tech_count), "Tools", "In My Repos" if c["tools"] else "Mastered"),
+        ("Open" if c["available"] else "Busy", "To New", "Opportunities"),
     ]
     sx = 318
     for i, (val, l1, l2) in enumerate(stats):
@@ -154,13 +298,15 @@ def about(user: dict, n: int = 2) -> str:
               f'<text x="{x + 38}" y="{122}" text-anchor="middle" font-size="9.5" class="muted">{esc(l2)}</text></g>')
 
     palette = [ORANGE, BLUE, "#f0b72f", "#ff7b72", "#bc8cff", "#39c5cf"]
-    for i, (title, desc) in enumerate(P["capabilities"][:6]):
+    capabilities = ([(CATEGORY_SHORT.get(cat, cat), trunc(", ".join(c["groups"][cat]["tools"][:3]), 22) or "next on my list")
+                     for cat in CATEGORY_ORDER] if c["groups"] else P["capabilities"])
+    for i, (title, desc) in enumerate(capabilities[:6]):
         col, row = i % 3, i // 3
         x, y = sx + col * 111, 142 + row * 72
-        c = palette[i % len(palette)]
+        color = palette[i % len(palette)]
         b += (f'<g class="rise" {d(.6 + i * .08)}>' + panel(x, y, 104, 64, 9) +
-              f'<rect x="{x + 10}" y="{y + 10}" width="20" height="20" rx="5" fill="{c}" fill-opacity=".15" stroke="{c}" filter="url(#glow)"/>'
-              f'<rect x="{x + 16}" y="{y + 16}" width="8" height="8" rx="2" fill="{c}"/>'
+              f'<rect x="{x + 10}" y="{y + 10}" width="20" height="20" rx="5" fill="{color}" fill-opacity=".15" stroke="{color}" filter="url(#glow)"/>'
+              f'<rect x="{x + 16}" y="{y + 16}" width="8" height="8" rx="2" fill="{color}"/>'
               f'<text x="{x + 10}" y="{y + 45}" font-size="10.5" font-weight="700">{esc(title)}</text>'
               f'<text x="{x + 10}" y="{y + 57}" font-size="8.6" class="muted">{esc(desc)}</text></g>')
 
@@ -182,7 +328,9 @@ def about(user: dict, n: int = 2) -> str:
     g += f'<path d="{orbit}" stroke="{ORANGE}" stroke-opacity=".35" stroke-dasharray="3 5"/>'
     g += f'<circle r="3.5" fill="{AMBER}" filter="url(#glow)"><animateMotion dur="6s" repeatCount="indefinite" path="{orbit}"/></circle>'
     b += g + "</g>"
-    b += bullet_list(672, 182, P["highlights"][:6], gap=17.5, size=11)
+    highlights = ([f"{t} · {k} repo{'s' if k != 1 else ''}" for t, k in c["tools"][:6]] if c["tools"]
+                  else P["highlights"][:6])
+    b += bullet_list(672, 182, highlights, gap=17.5, size=11)
     return svg(W, H, b, title="About Me")
 
 
@@ -239,10 +387,20 @@ def tech_stack(tech: dict, n: int = 3) -> str:
 
 # --------------------------------------------------------- what I build
 
-def what_i_build(n: int = 4) -> str:
+def what_i_build(n: int = 4, ctx: dict | None = None) -> str:
     W, H = 850, 206
-    b = frame(W, H) + heading(24, 20, n, "What I Build", "End-to-end solutions for real world problems")
-    items = config.WHAT_I_BUILD[:6]
+    live = bool(ctx and ctx["groups"])
+    b = frame(W, H) + heading(24, 20, n, "What I Build",
+                              "Live from my repositories, by area" if live else "End-to-end solutions for real world problems")
+    if live:
+        items = []
+        for cat in CATEGORY_ORDER:
+            g = ctx["groups"][cat]
+            desc = (f"{g['repos']} repo{'s' if g['repos'] != 1 else ''} · newest: "
+                    f"{g['newest'].replace('-', ' ').replace('_', ' ')}" if g["repos"] else "Next on my list")
+            items.append((CATEGORY_WORDS[cat][1], desc))
+    else:
+        items = config.WHAT_I_BUILD[:6]
     gap = 10
     tw = (W - 48 - gap * (len(items) - 1)) / len(items)
     for i, (title, desc) in enumerate(items):
@@ -265,14 +423,16 @@ SERVICES = ["Web Application", "Backend System", "REST API", "Admin Dashboard",
             "WordPress Website", "Cloud Deployment", "API Integration"]
 
 
-def collaborate(user: dict, n: int = 21) -> str:
+def collaborate(user: dict, n: int = 21, ctx: dict | None = None) -> str:
+    c = _ctx(user, ctx)
+    services = [CATEGORY_WORDS[cat][2] for cat in CATEGORY_ORDER if c["groups"].get(cat, {}).get("repos")] or SERVICES
     W, H = 850, 176
     phase = sky_phase()
     b = frame(W, H) + sky(1, 1, W - 2, H - 2, phase)
     b += skyline(0, H - 1, W, seed=3, opacity=.35, max_h=60, lit=SKIES[phase][3])
     b += heading(24, 20, n, "Let's Collaborate", "Have a project in mind? Let's build something amazing together.")
     x, y = 24, 78
-    for i, s in enumerate(SERVICES):
+    for i, s in enumerate(services):
         w = len(s) * 6.1 + 20
         if x + w > 610:
             x, y = 24, y + 32
@@ -284,7 +444,8 @@ def collaborate(user: dict, n: int = 21) -> str:
           f'<text x="{bx + 94}" y="{by + 28}" text-anchor="middle" font-size="14" font-weight="800" fill="#1a0d02">Start a Project  →</text></g>')
     b += (f'<text x="24" y="158" font-size="11" class="muted fade" {d(1)}>Built with <tspan fill="{ORANGE}">♥</tspan> '
           f'using code, coffee and curiosity.</text>')
-    b += f'<text x="826" y="158" text-anchor="end" font-size="11" class="muted fade" {d(1)}>Open to opportunities worldwide · @{esc(user["login"])}</text>'
+    status = "Open to opportunities worldwide" if c["available"] else "Heads-down right now, but say hi"
+    b += f'<text x="826" y="158" text-anchor="end" font-size="11" class="muted fade" {d(1)}>{status} · @{esc(user["login"])}</text>'
     return svg(W, H, b, title="Let's Collaborate")
 
 

@@ -57,11 +57,11 @@ jobs:
           git commit -q -m "Update profile cards"
           git push -q --force "https://x-access-token:${TOKEN}@github.com/${PROFILE_REPO}.git" output
 
-      - name: Commit README project links if they changed
+      - name: Commit README links (projects, contact buttons) if they changed
         working-directory: profile
         run: |
           if git diff --quiet README.md; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -q -am "Update featured project links"
+          git commit -q -am "Update profile links"
           git push -q
