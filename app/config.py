@@ -1,7 +1,8 @@
 """Profile content shown on the cards.
 
 Everything that comes from GitHub (name, location, repos, stars, followers,
-commits, PRs, issues, contribution calendar, activity) is fetched live.
+commits, PRs, issues, contribution calendar, activity, achievements and which
+TECH_STACK items your repos use) is fetched live.
 Everything below is your own static content - edit it freely.
 """
 
@@ -25,37 +26,40 @@ PROFILE = {
     "about_subtitle": "Full Stack Developer | Problem Solver | Continuous Learner",
     "about": (
         "I'm a Full Stack Software Developer with experience in building web "
-        "applications, REST APIs, admin dashboards and cloud-based solutions. "
-        "I enjoy turning ideas into real products with clean code, scalable "
-        "architecture and user-focused design."
+        "applications, REST APIs, admin dashboards, cloud-based solutions and "
+        "Solidity smart contracts. I enjoy turning ideas into real products "
+        "with clean code, scalable architecture and user-focused design."
     ),
     # Set to a number to override; None = years since GitHub account creation.
     "years_experience": None,
     "available": True,
-    "chips": ["Frontend", "Backend", "APIs", "Databases", "Cloud", "DevOps"],
+    "chips": ["Frontend", "Backend", "APIs", "Databases", "Cloud", "Web3"],
+    # The hero terminal shows the first 5.
     "terminal_lines": [
         "Building Web Applications",
         "Creating Scalable APIs",
-        "Solving Real-world Problems",
+        "Writing Smart Contracts",
         "Open to Collaboration",
         "Always Learning...",
     ],
     "neon_words": ["Code", "Design", "Develop", "Deploy", "Repeat"],
+    # The about card shows the first 6 of each list below.
     "highlights": [
         "Clean Code",
         "Scalable Systems",
         "Modern UI/UX",
         "REST APIs",
-        "Database Design",
+        "Blockchain Dev",
         "Cloud Deployment",
     ],
+    # Keep titles under ~15 characters and descriptions under ~22 to fit the boxes.
     "capabilities": [
-        ("Frontend", "Responsive modern UIs"),
-        ("Backend", "Scalable server logic"),
+        ("Frontend", "React, TypeScript, Vite"),
+        ("Backend & APIs", "FastAPI, Django, Flask"),
         ("Database", "MongoDB, PostgreSQL"),
-        ("Cloud", "AWS, S3, Lambda, EC2"),
-        ("Admin & CMS", "WordPress, Woo"),
-        ("API Integration", "Third-party APIs"),
+        ("Cloud", "AWS Amplify, S3, CDN"),
+        ("CMS", "WordPress, Elementor"),
+        ("Blockchain", "Solidity contracts"),
     ],
 }
 
@@ -75,18 +79,21 @@ TECH_STACK = {
         ("FastAPI", "⚡", "#05998B"),
         ("Django", "dj", "#44B78B"),
         ("DRF", "DRF", "#E2412B"),
+        ("Flask", "FL", "#2BE27D"),
         ("Java", "J", "#F89820"),
+        ("REST API", "API", "#39C5CF"),
+        ("Solidity", "Sol", "#AA6746"),
     ],
     "Database": [
         ("MongoDB", "M", "#47A248"),
         ("PostgreSQL", "PG", "#4169E1"),
-        ("Redis", "R", "#DC382D"),
     ],
     "Cloud & DevOps": [
         ("AWS", "aws", "#FF9900"),
         ("S3", "S3", "#569A31"),
         ("Lambda", "λ", "#FF9900"),
-        ("EC2", "EC2", "#F58534"),
+        ("Amplify", "AM", "#F58534"),
+        ("Cloudfront", "CF", "#34F5F2"),
         ("Docker", "D", "#2496ED"),
         ("Git", "G", "#F05032"),
         ("GitHub", "GH", "#E6EDF3"),
@@ -94,18 +101,56 @@ TECH_STACK = {
     "CMS & Tools": [
         ("WordPress", "W", "#21759B"),
         ("Elementor", "E", "#D63384"),
-        ("WooCommerce", "Wo", "#96588A"),
+        ("Custom CMS", "CC", "#96588A"),
         ("VS Code", "VS", "#007ACC"),
     ],
 }
 
+# How each TECH_STACK item is spotted in a repo: its languages, topics, name and
+# description words, package.json / requirements.txt dependencies, and the
+# "docker" / "github-actions" markers for a Dockerfile / .github/workflows.
+# A trailing * matches as a prefix. Items not listed match their lowercase name.
+TECH_ALIASES = {
+    "HTML5": ["html", "html5"],
+    "CSS3": ["css", "css3", "scss"],
+    "JavaScript": ["javascript", "js", "node", "nodejs", "node.js"],
+    "TypeScript": ["typescript", "ts", "tsx"],
+    "React": ["react", "reactjs", "react-dom"],
+    "Vite": ["vite", "@vitejs/*"],
+    "Tailwind": ["tailwind", "tailwindcss"],
+    "Python": ["python", "python3"],
+    "FastAPI": ["fastapi", "uvicorn"],
+    "Django": ["django", "djangorestframework"],
+    "DRF": ["drf", "djangorestframework", "django-rest-framework"],
+    "Flask": ["flask", "flask-*"],
+    "Java": ["java", "spring", "spring-boot", "springboot"],
+    "REST API": ["api", "apis", "rest", "rest-api", "restful", "fastapi", "flask", "express",
+                 "djangorestframework", "axios"],
+    "Solidity": ["solidity", "smart-contracts", "hardhat", "truffle", "foundry", "ethers", "web3",
+                 "@openzeppelin/*", "blockchain", "ethereum"],
+    "MongoDB": ["mongodb", "mongo", "mongoose", "pymongo", "motor"],
+    "PostgreSQL": ["postgresql", "postgres", "pg", "psycopg2", "psycopg2-binary", "psycopg", "asyncpg"],
+    "AWS": ["aws", "boto3", "aws-sdk", "@aws-sdk/*"],
+    "S3": ["s3", "aws-s3", "@aws-sdk/client-s3"],
+    "Lambda": ["lambda", "aws-lambda", "serverless", "mangum"],
+    "Amplify": ["amplify", "aws-amplify", "@aws-amplify/*"],
+    "Cloudfront": ["cloudfront", "cdn", "@aws-sdk/client-cloudfront"],
+    "Docker": ["docker", "dockerfile", "docker-compose"],
+    "Git": ["*"],     # every repo
+    "GitHub": ["*"],
+    "WordPress": ["wordpress", "wp"],
+    "Elementor": ["elementor"],
+    "Custom CMS": ["cms", "custom-cms", "headless-cms"],
+    "VS Code": [],    # nothing in a repo shows this
+}
+
 WHAT_I_BUILD = [
-    ("Web Applications", "Modern, responsive, high performance web apps"),
-    ("REST APIs", "Secure and scalable APIs for web and mobile"),
-    ("Backend Systems", "Business logic, auth, background processing"),
+    ("Web Applications", "Modern, responsive web apps with React & Vite"),
+    ("APIs & Backends", "Custom REST APIs with FastAPI, Django & Flask"),
+    ("Smart Contracts", "Solidity smart contracts for blockchain apps"),
     ("Admin Dashboards", "Manage content, users and application data"),
-    ("Cloud Solutions", "Deploy, scale and monitor on AWS"),
-    ("CMS Development", "WordPress, Elementor, WooCommerce"),
+    ("Cloud Solutions", "Deploy on AWS with Amplify, S3 & Cloudfront"),
+    ("CMS Development", "WordPress, Elementor & custom CMS builds"),
 ]
 
 # Optional: pin repos by name. Empty = pick automatically (stars, then recent push).
@@ -114,16 +159,16 @@ FEATURED_REPOS: list[str] = []
 ARCHITECTURE = {
     "client": ("Client", "Browser / User"),
     "frontend": ("Frontend", "React / Vite", "HTML / CSS / JS"),
-    "api": ("API Layer", "FastAPI / Django", "Authentication"),
-    "database": ("Database", "MongoDB / PostgreSQL", "Redis (Cache)"),
-    "cloud": ("Cloud", "AWS (S3, Lambda, EC2)", ""),
+    "api": ("API Layer", "FastAPI / Django / Flask", "Authentication"),
+    "database": ("Database", "MongoDB / PostgreSQL", ""),
+    "cloud": ("Cloud", "AWS Amplify / S3", "Lambda / CloudFront"),
     "features": [
         "Secure Auth (JWT/OAuth)",
         "RESTful APIs",
         "Database Optimization",
         "File Storage (AWS S3)",
-        "Dockerized Deployment",
-        "Scalable Architecture",
+        "CDN via CloudFront",
+        "Smart Contracts (Solidity)",
     ],
 }
 
@@ -143,15 +188,6 @@ EXPLORING = [
     ("Automation & Integrations", 55),
 ]
 
-ACHIEVEMENTS = [
-    ("Web Development", "#ff8c42"),
-    ("API Development", "#58a6ff"),
-    ("Cloud Fundamentals", "#f0b72f"),
-    ("Docker & DevOps", "#3fb950"),
-    ("Problem Solving", "#ff6a3d"),
-    ("Open Source Contributor", "#bc8cff"),
-]
-
 WORKFLOW = [
     ("Idea", "Understand needs"),
     ("Design", "Plan arch & UI/UX"),
@@ -168,6 +204,6 @@ PROBLEM_SOLUTION = [
     ("Complex UI Requirements", "Reusable components & clean architecture"),
     ("Authentication & Security", "JWT, OAuth, RBAC"),
     ("Data Management", "Database design & optimization"),
-    ("Deployment Issues", "Docker + AWS + CI/CD"),
-    ("Manual Processes", "Automation & integrations"),
+    ("Deployment Issues", "AWS Amplify + CloudFront + CI/CD"),
+    ("Trust Between Parties", "Solidity smart contracts"),
 ]

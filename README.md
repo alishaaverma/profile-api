@@ -45,7 +45,10 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/tech-stack`, `/card/what-i-build`, `/card/architecture`, `/card/backend`, `/card/cloud`, `/card/workflow`, `/card/problem-solution`, `/card/achievements`, `/card/collaborate` | content from `app/config.py` |
+| `/card/tech-stack` | `TECH_STACK` with per-tool repo counts, plus languages your repos use that the config misses |
+| `/card/architecture`, `/card/cloud` | most used tools per layer, repos with Docker / GitHub Actions / AWS |
+| `/card/achievements` | stars, commits, PRs, yearly contributions, repos, years on GitHub |
+| `/card/what-i-build`, `/card/backend`, `/card/workflow`, `/card/problem-solution`, `/card/collaborate` | content from `app/config.py` |
 | `/card/heading?title=&subtitle=&n=` | section heading |
 | `/card/button?label=&icon=&primary=` | link buttons (github, linkedin, email, resume) |
 
@@ -56,4 +59,6 @@ JSON: `/api/profile`, `/api/projects`, `/api/github/stats`, `/api/activity`, `/a
 ## Customise
 
 Edit `app/config.py`. It holds the tagline, about text, tech stack, timeline, "currently exploring" percentages,
-achievements, workflow and pinned repos (`FEATURED_REPOS`).
+workflow and pinned repos (`FEATURED_REPOS`). `TECH_ALIASES` controls how each tech-stack item is spotted in a repo
+(languages, topics, description, `package.json` / `requirements.txt` dependencies, Dockerfile, workflows). Adding
+topics to your repos on GitHub makes the counts more accurate.

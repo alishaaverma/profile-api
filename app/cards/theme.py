@@ -148,6 +148,15 @@ def badge_num(x, y, num: int, size: int = 30) -> str:
     )
 
 
+def count_badge(cx, cy, n: int, r: float = 7.5) -> str:
+    """Small orange bubble with a repo count; empty when n is 0."""
+    if not n:
+        return ""
+    return (f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{ORANGE}" stroke="#0d1117" stroke-width="1.5"/>'
+            f'<text x="{cx}" y="{cy + r * .42:.1f}" text-anchor="middle" font-size="{r * (1.07 if n < 10 else .9):.1f}" '
+            f'font-weight="800" fill="#1a0d02">{min(n, 99)}</text>')
+
+
 def heading(x, y, num: int | None, title: str, subtitle: str = "", delay: float = 0) -> str:
     """Section heading used at the top of each card."""
     out = f'<g class="rise" {d(delay)}>'

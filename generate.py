@@ -33,27 +33,28 @@ BUTTONS = {
 
 
 async def render(login: str) -> tuple[dict[str, str], list[dict]]:
-    user, repos, events, stats, cal = await asyncio.gather(
-        gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login))
+    user, repos, events, stats, cal, tech = await asyncio.gather(
+        gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login),
+        gh.get_tech(login))
     top = gh.featured(repos["repos"], 4)
 
     cards = {
         "hero": prof.hero(user),
         "about": prof.about(user),
-        "tech-stack": prof.tech_stack(),
+        "tech-stack": prof.tech_stack(tech),
         "what-i-build": prof.what_i_build(),
         "featured-projects": prof.section_heading("Featured Projects", "Live from my GitHub repositories", 5),
-        "architecture": eng.architecture(),
+        "architecture": eng.architecture(tech),
         "timeline": live.timeline_opensource(user, stats, cal),
         "analytics": live.analytics_exploring(user, stats, cal),
         "activity": live.activity_terminal(user, repos, events),
         "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos"),
         "backend": eng.backend_database(),
-        "cloud": eng.cloud_deploy(),
+        "cloud": eng.cloud_deploy(tech),
         "workflow": eng.workflow(),
         "problem-solution": eng.problem_solution(),
         "developer-os": live.developer_os(user, repos, events),
-        "achievements": eng.achievements(),
+        "achievements": eng.achievements(user, repos, stats, cal),
         "collaborate": prof.collaborate(user),
     }
     for i in range(4):

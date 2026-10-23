@@ -1,10 +1,16 @@
-"""Static engineering showcase cards: architecture, backend, cloud, workflow…"""
+"""Engineering showcase cards: architecture, backend, cloud, workflow, achievements.
+
+Architecture, cloud and achievements read live GitHub data; the rest is config text.
+"""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from .. import config
-from .theme import (AMBER, BLUE, BORDER, CARD2, GREEN, ORANGE, bullet_list, cube, d, esc, flow_line,
-                    frame, heading, panel, svg, wrap)
+from .. import github as gh
+from .theme import (AMBER, BLUE, BORDER, CARD2, GREEN, ORANGE, bullet_list, compact, count_badge, cube, d, esc,
+                    flow_line, frame, heading, panel, svg, synced, trunc, wrap)
 
 
 def _box(x, y, w, h, title, lines=(), icon=True, delay=0.0, accent=ORANGE):
@@ -21,10 +27,25 @@ def _box(x, y, w, h, title, lines=(), icon=True, delay=0.0, accent=ORANGE):
 
 # ------------------------------------------------------- architecture
 
-def architecture(n: int = 6) -> str:
+def _layer(tech: dict, cat: str, fallback, skip=()) -> list[str]:
+    """Most used TECH_STACK items of a category and how many repos use any of them."""
+    names = [name for name, _, _ in config.TECH_STACK.get(cat, []) if name not in skip]
+    used = sorted((name for name in names if gh.tech_count(tech, name)), key=lambda nm: -gh.tech_count(tech, nm))
+    if not used:
+        return list(fallback)
+    total = gh.tech_count(tech, *used)
+    return [trunc(" / ".join(used[:2]), 22), f"used in {total} repo{'s' if total != 1 else ''}"]
+
+
+def architecture(tech: dict, n: int = 6) -> str:
     A = config.ARCHITECTURE
     W, H = 850, 262
-    b = frame(W, H) + heading(24, 20, n, "System Architecture", "Typical architecture for a full-stack web application.")
+    A = {**A,
+         "frontend": (A["frontend"][0], *_layer(tech, "Frontend", A["frontend"][1:])),
+         "api": (A["api"][0], *_layer(tech, "Backend", A["api"][1:])),
+         "database": (A["database"][0], *_layer(tech, "Database", A["database"][1:])),
+         "cloud": (A["cloud"][0], *_layer(tech, "Cloud & DevOps", A["cloud"][1:], skip=("Git", "GitHub")))}
+    b = frame(W, H) + heading(24, 20, n, "System Architecture", "My stack per layer, detected from my repositories.")
     # client (laptop)
     cx, cy = 66, 152
     b += f'<circle cx="{cx}" cy="{cy}" r="40" fill="{ORANGE}" fill-opacity=".12" filter="url(#softglow)" class="glowpulse"/>'
@@ -47,6 +68,7 @@ def architecture(n: int = 6) -> str:
     b += _box(dx, 174, 160, 64, A["cloud"][0], A["cloud"][1:], delay=.6, accent=BLUE)
     b += panel(676, 66, 150, 172, 10)
     b += bullet_list(686, 92, A["features"][:6], gap=26, size=9.8, delay=.6)
+    b += synced(826, 252)
     return svg(W, H, b, title="System Architecture")
 
 
@@ -58,6 +80,16 @@ def _cylinder(cx, top, w, h, color, delay):
             f'<path d="M{cx - rx},{top} v{h} a{rx},{ry} 0 0,0 {w},0 v{-h}" fill="{color}" fill-opacity=".18" stroke="{color}"/>'
             f'<ellipse cx="{cx}" cy="{top}" rx="{rx}" ry="{ry}" fill="{color}" fill-opacity=".45" stroke="{color}"/>'
             f'<path d="M{cx - rx},{top + h / 2} a{rx},{ry} 0 0,0 {w},0" stroke="{color}" stroke-opacity=".6"/></g>')
+
+
+# Shown for the TECH_STACK "Database" items: kind, features.
+DB_INFO = {
+    "MongoDB": ("NoSQL Database", ["Documents", "Collections", "Aggregation"]),
+    "PostgreSQL": ("Relational Database", ["Tables", "Relations", "Transactions"]),
+    "MySQL": ("Relational Database", ["Tables", "Joins", "Transactions"]),
+    "Redis": ("In-Memory Cache", ["Caching", "Session Storage", "Real-time Data"]),
+    "SQLite": ("Embedded Database", ["Local Storage", "Zero Config", "Prototyping"]),
+}
 
 
 def backend_database(n: int = 14) -> str:
@@ -81,11 +113,10 @@ def backend_database(n: int = 14) -> str:
     b += f'<line x1="424" y1="22" x2="424" y2="{H - 22}" stroke="{BORDER}"/>'
     b += heading(440, 20, n + 1, "Database Architecture", "Multi-database architecture for flexible apps.")
     b += _box(573, 70, 120, 30, "Application", icon=False, delay=.2)
-    dbs = [("MongoDB", "NoSQL Database", "#47A248", ["Documents", "Collections", "Aggregation"]),
-           ("PostgreSQL", "Relational Database", "#4169E1", ["Tables", "Relations", "Transactions"]),
-           ("Redis", "In-Memory Cache", "#DC382D", ["Caching", "Session Storage", "Real-time Data"])]
-    for i, (name, kind, color, feats) in enumerate(dbs):
-        cx = 503 + i * 130
+    dbs = [(name, *DB_INFO.get(name, ("Database", [])), color)
+           for name, _, color in config.TECH_STACK.get("Database", [])][:3]
+    for i, (name, kind, feats, color) in enumerate(dbs):
+        cx = round(633 + (i - (len(dbs) - 1) / 2) * 130)
         b += flow_line(f"M633,100 C633,118 {cx},112 {cx},130", color=color, dots=1, dur=1.8)
         b += _cylinder(cx, 136, 54, 40, color, .4 + i * .15)
         b += (f'<g class="rise" {d(.6 + i * .15)}><text x="{cx}" y="200" text-anchor="middle" font-size="11.5" font-weight="700">{esc(name)}</text>'
@@ -120,27 +151,42 @@ def _node_icon(kind, cx, cy):
             f'<text x="{cx + 1}" y="{cy + 5}" text-anchor="middle" font-size="7.5" font-weight="800" fill="#FF9900">aws</text>')
 
 
-def cloud_deploy(n: int = 16) -> str:
+SERVICE_INFO = {
+    "S3": "File Storage", "Lambda": "Serverless", "Amplify": "Hosting & CI/CD", "Cloudfront": "CDN",
+    "EC2": "Virtual Server", "RDS": "Managed SQL", "DynamoDB": "NoSQL Store", "Vercel": "Hosting",
+}
+
+
+def cloud_deploy(tech: dict, n: int = 16) -> str:
     W, H = 850, 236
-    b = frame(W, H) + heading(24, 20, n, "Cloud & Deployment", "From code to production.")
-    nodes = [("laptop", "Local", "Development"), ("git", "Git", "Version Control"), ("actions", "GitHub Actions", "CI/CD Pipeline"),
-             ("docker", "Docker", "Containerization"), ("aws", "AWS", "Cloud Platform")]
+    b = frame(W, H) + heading(24, 20, n, "Cloud & Deployment", "From code to production · repo counts from GitHub.")
+    nodes = [("laptop", "Local", "Development", 0),
+             ("git", "Git", "Version Control", len(tech["repos"])),
+             ("actions", "GitHub Actions", "CI/CD Pipeline", gh.tech_repos(tech, "github-actions")),
+             ("docker", "Docker", "Containerization", gh.tech_count(tech, "Docker")),
+             ("aws", "AWS", "Cloud Platform", gh.tech_count(tech, "AWS"))]
     cy = 110
     xs = [80 + i * 172 for i in range(len(nodes))]
     for i in range(len(nodes) - 1):
         b += flow_line(f"M{xs[i] + 30},{cy} L{xs[i + 1] - 30},{cy}", dur=1.6)
-    for i, ((kind, t, s), x) in enumerate(zip(nodes, xs)):
+    for i, ((kind, t, s, repos), x) in enumerate(zip(nodes, xs)):
         b += (f'<g class="pop" {d(.15 + i * .15)}><circle cx="{x}" cy="{cy}" r="28" fill="{CARD2}" stroke="{ORANGE}" stroke-opacity=".6" filter="url(#glow)"/>'
-              f'{_node_icon(kind, x, cy)}</g>'
+              f'{_node_icon(kind, x, cy)}{count_badge(x + 21, cy - 21, repos, r=9)}</g>'
               f'<g class="rise" {d(.3 + i * .15)}><text x="{x}" y="{cy + 48}" text-anchor="middle" font-size="12" font-weight="700">{esc(t)}</text>'
               f'<text x="{x}" y="{cy + 62}" text-anchor="middle" font-size="9.5" class="muted">{esc(s)}</text></g>')
-    services = [("EC2", "Virtual Server"), ("S3", "File Storage"), ("Lambda", "Serverless"), ("Monitoring", "Logs & Alerts")]
-    x = 140
-    for i, (t, s) in enumerate(services):
-        b += (f'<g class="rise" {d(1 + i * .1)}>' + panel(x, 192, 130, 30, 7) +
-              f'<rect x="{x + 10}" y="200" width="14" height="14" rx="3" fill="#FF9900" fill-opacity=".25" stroke="#FF9900"/>'
+    # the remaining Cloud & DevOps items of TECH_STACK
+    services = [(t, SERVICE_INFO.get(t, "Cloud Service"), color) for t, _, color in config.TECH_STACK.get("Cloud & DevOps", [])
+                if t not in {"AWS", "Docker", "Git", "GitHub"}][:5]
+    x = (W - len(services) * 142 + 12) / 2
+    for i, (t, s, color) in enumerate(services):
+        repos = gh.tech_count(tech, t)
+        b += (f'<g class="rise" {d(1 + i * .1)}>' + panel(round(x), 192, 130, 30, 7) +
+              f'<rect x="{x + 10:.0f}" y="200" width="14" height="14" rx="3" fill="{color}" fill-opacity=".25" stroke="{color}"/>'
               f'<text x="{x + 32}" y="205" font-size="10" font-weight="700">{esc(t)}</text>'
-              f'<text x="{x + 32}" y="216" font-size="8.5" class="muted">{esc(s)}</text></g>')
+              f'<text x="{x + 32}" y="216" font-size="8.5" class="muted">{esc(s)}</text>')
+        if repos:
+            b += f'<text x="{x + 122}" y="205" text-anchor="end" font-size="9" font-weight="700" fill="{ORANGE}">{repos} repo{"s" if repos != 1 else ""}</text>'
+        b += "</g>"
         x += 142
     return svg(W, H, b, title="Cloud & Deployment")
 
@@ -191,13 +237,23 @@ def problem_solution(n: int = 18) -> str:
 
 # --------------------------------------------------------- achievements
 
-def achievements(n: int = 20) -> str:
-    items = config.ACHIEVEMENTS[:6]
+def achievements(user: dict, repos: dict, stats: dict, calendar: dict, n: int = 20) -> str:
+    created = datetime.fromisoformat(user["created_at"].replace("Z", "+00:00"))
+    years = max(1, (datetime.now(timezone.utc) - created).days // 365)
+    items = [
+        (compact(repos["total_stars"]), "Stars Earned", "#ff8c42"),
+        (compact(stats["commits"]), "Commits", "#58a6ff"),
+        (compact(stats["prs"]), "Pull Requests", "#f0b72f"),
+        (compact(calendar["total"]), "Contributions in last year", "#3fb950"),
+        (compact(user["public_repos"]), "Public Repositories", "#ff6a3d"),
+        (f"{years}+", "Years on GitHub", "#bc8cff"),
+    ]
     W, H = 850, 190
-    b = frame(W, H) + heading(24, 20, n, "Achievements & Certifications", "Recognitions and milestones")
+    b = frame(W, H) + heading(24, 20, n, "GitHub Achievements", "Milestones, synced from my GitHub account")
+    b += synced(826, 40)
     step = (W - 48) / len(items)
     cy = 104
-    for i, (label, color) in enumerate(items):
+    for i, (value, label, color) in enumerate(items):
         cx = 24 + step * (i + .5)
         pts = " ".join(f"{cx + 28 * c:.1f},{cy + 28 * s:.1f}" for c, s in
                        ((0, -1), (.87, -.5), (.87, .5), (0, 1), (-.87, .5), (-.87, -.5)))
@@ -207,8 +263,9 @@ def achievements(n: int = 20) -> str:
               f'<polygon points="{pts}" fill="{color}" fill-opacity=".18" filter="url(#softglow)" class="glowpulse" style="animation-delay:{i * .4}s"/>'
               f'<polygon points="{pts}" fill="{CARD2}" stroke="{color}" stroke-width="1.6" filter="url(#glow)"/>'
               f'<polygon points="{inner}" fill="{color}" fill-opacity=".2" stroke="{color}" stroke-opacity=".6"/>'
-              f'<path transform="translate({cx - 7},{cy - 7}) scale(.875)" d="M8 0l2.4 5 5.6.7-4 3.9 1 5.4L8 12.4 3 15l1-5.4-4-3.9L5.6 5z" fill="{color}"/></g>')
+              f'<text x="{cx:.1f}" y="{cy + 4.5}" text-anchor="middle" font-size="{13 if len(value) <= 3 else 11}" font-weight="800" '
+              f'fill="{color}">{esc(value)}</text></g>')
         for j, line in enumerate(wrap(label, 16, 2)):
             b += f'<text x="{cx:.0f}" y="{cy + 48 + j * 13}" text-anchor="middle" font-size="10.5" font-weight="600" class="rise" {d(.4 + i * .12)}>{esc(line)}</text>'
-    return svg(W, H, b, title="Achievements")
+    return svg(W, H, b, title="GitHub Achievements")
 

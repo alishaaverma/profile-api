@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from .. import config
+from .. import github as gh
 from .theme import (AMBER, BLUE, BORDER, CARD2, GREEN, MUTED, ORANGE, TEXT, bullet_list,
-                    compact, cube, d, dot, esc, frame, heading, panel, skyline, svg, synced, wrap)
+                    compact, count_badge, cube, d, dot, esc, frame, heading, panel, skyline, svg, synced, wrap)
 
 P = config.PROFILE
 
@@ -165,22 +166,40 @@ def about(user: dict, n: int = 2) -> str:
 
 # ----------------------------------------------------------- tech stack
 
-def _tile(x, y, name, label, color, delay):
+def _tile(x, y, name, label, color, delay, repos=0):
     fs = 15 if len(label) <= 2 else 11.5
     short = name if len(name) <= 9 else name[:8] + "…"
     return (f'<g class="pop" {d(delay)}>'
             f'<rect x="{x}" y="{y}" width="38" height="38" rx="9" fill="{color}" fill-opacity=".12" stroke="{color}" stroke-opacity=".75"/>'
             f'<text x="{x + 19}" y="{y + 19 + fs * .36:.1f}" text-anchor="middle" font-size="{fs}" font-weight="800" fill="{color}">{esc(label)}</text>'
-            f'<text x="{x + 19}" y="{y + 51}" text-anchor="middle" font-size="9" class="muted">{esc(short)}</text></g>')
+            f'<text x="{x + 19}" y="{y + 51}" text-anchor="middle" font-size="9" class="muted">{esc(short)}</text>'
+            f'{count_badge(x + 37, y + 1, repos)}</g>')
 
 
-def tech_stack(n: int = 3) -> str:
+def _short_label(name: str) -> str:
+    if len(name) <= 3:
+        return name
+    words = name.split()
+    return "".join(w[0] for w in words[:2]).upper() if len(words) > 1 else name[:2]
+
+
+FRONTEND_LANGS = {"Vue", "Svelte", "Astro", "SCSS", "Less", "Dart", "Elm"}
+
+
+def tech_stack(tech: dict, n: int = 3) -> str:
     W = 850
-    cats = list(config.TECH_STACK.items())
+    cats = {cat: [(name, label, color, gh.tech_count(tech, name)) for name, label, color in items]
+            for cat, items in config.TECH_STACK.items()}
+    # languages the repos use that the config doesn't list yet
+    for lang, count in gh.untracked_languages(tech):
+        cat = "Frontend" if lang in FRONTEND_LANGS and "Frontend" in cats else "Backend"
+        cats.setdefault(cat, []).append((lang, _short_label(lang), gh.lang_color(lang), count))
+    cats = list(cats.items())
+    used = len(tech["repos"])
     rows = max((len(items) + 2) // 3 for _, items in cats)
     ph = 40 + rows * 62
     H = 76 + ph + 18
-    b = frame(W, H) + heading(24, 20, n, "Tech Stack", "Tools & technologies I work with")
+    b = frame(W, H) + heading(24, 20, n, "Tech Stack", f"Tools & technologies I work with · scanned {used} repos")
 
     tabs = ["All"] + [c for c, _ in cats]
     x = W - 24
@@ -203,10 +222,11 @@ def tech_stack(n: int = 3) -> str:
         b += f'<text x="{x0 + 12:.0f}" y="98" font-size="12" font-weight="700">{esc(cat)}</text>'
         b += f'<rect x="{x0 + 12:.0f}" y="104" width="22" height="2" rx="1" fill="{ORANGE}"/></g>'
         inner = (cw - 3 * 38) / 4
-        for i, (name, label, color) in enumerate(items):
+        for i, (name, label, color, repos) in enumerate(items):
             col, row = i % 3, i // 3
-            b += _tile(round(x0 + inner + col * (38 + inner)), 116 + row * 62, name, label, color, .3 + k * .05)
+            b += _tile(round(x0 + inner + col * (38 + inner)), 116 + row * 62, name, label, color, .3 + k * .05, repos)
             k += 1
+    b += synced(W - 24, H - 6)
     return svg(W, H, b, title="Tech Stack")
 
 

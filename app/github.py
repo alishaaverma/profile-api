@@ -1,6 +1,6 @@
 """Live GitHub data with a small in-memory TTL cache.
 
-Each data group (user, repos, events, stats, calendar) is fetched and cached
+Each data group (user, repos, events, stats, calendar, tech) is fetched and cached
 separately so a card only triggers the requests it actually needs. With a
 GITHUB_TOKEN the GraphQL API is used for stats/calendar; without one we fall
 back to the REST search API and the public contributions page.
@@ -9,6 +9,7 @@ back to the REST search API and the public contributions page.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import time
 from collections import Counter
@@ -331,6 +332,119 @@ async def get_calendar(login: str) -> dict:
         return {"total": total, "weeks": weeks}
 
     return await _cached(f"calendar:{login}", load)
+
+
+# --------------------------------------------------------------------- tech
+
+TECH_QUERY = """
+query($login: String!) {
+  user(login: $login) {
+    repositories(first: 100, ownerAffiliations: OWNER, isFork: false, orderBy: {field: PUSHED_AT, direction: DESC}) {
+      nodes {
+        name
+        description
+        isArchived
+        repositoryTopics(first: 20) { nodes { topic { name } } }
+        languages(first: 10) { nodes { name } }
+        dockerfile: object(expression: "HEAD:Dockerfile") { __typename }
+        workflows: object(expression: "HEAD:.github/workflows") { __typename }
+        packageJson: object(expression: "HEAD:package.json") { ... on Blob { text } }
+        requirements: object(expression: "HEAD:requirements.txt") { ... on Blob { text } }
+      }
+    }
+  }
+}
+"""
+
+_WORD_RE = re.compile(r"[a-z0-9@][a-z0-9+#./_-]*")
+
+
+def _words(s: str | None) -> set[str]:
+    return {w.strip("./-") for w in _WORD_RE.findall((s or "").lower())} - {""}
+
+
+def _npm_deps(blob: dict | None) -> set[str]:
+    try:
+        pkg = json.loads((blob or {}).get("text") or "{}")
+    except ValueError:
+        return set()
+    if not isinstance(pkg, dict):
+        return set()
+    return {k.lower() for key in ("dependencies", "devDependencies") for k in (pkg.get(key) or {})}
+
+
+def _pip_deps(blob: dict | None) -> set[str]:
+    out = set()
+    for line in ((blob or {}).get("text") or "").splitlines():
+        name = re.split(r"[\s<>=!~\[;@#]", line.strip(), maxsplit=1)[0].lower().replace("_", "-")
+        if name and not name.startswith("-"):
+            out.add(name)
+    return out
+
+
+async def get_tech(login: str) -> dict:
+    """{'repos': {name: {tokens}}, 'languages': Counter(language -> repo count)}
+
+    Tokens are what a repo shows about the tech it uses; match them against
+    config.TECH_ALIASES with tech_count(). With a GITHUB_TOKEN, one GraphQL call
+    also reads every repo's languages, package.json, requirements.txt, Dockerfile
+    and workflows; without one, only the primary language, topics and text are used.
+    """
+
+    async def load():
+        repos, langs = {}, Counter()
+        if config.GITHUB_TOKEN:
+            nodes = (await _graphql(TECH_QUERY, login=login))["user"]["repositories"]["nodes"]
+            for r in nodes:
+                if r["isArchived"] or r["name"].lower() == login.lower():
+                    continue
+                names = [l["name"] for l in r["languages"]["nodes"]]
+                tokens = {n.lower() for n in names} | {t["topic"]["name"] for t in r["repositoryTopics"]["nodes"]}
+                tokens |= _words(r["name"].replace("-", " ").replace("_", " ")) | _words(r["description"])
+                tokens |= _npm_deps(r["packageJson"]) | _pip_deps(r["requirements"])
+                if r["dockerfile"]:
+                    tokens.add("docker")
+                if r["workflows"]:
+                    tokens.add("github-actions")
+                repos[r["name"]] = tokens
+                langs.update(names)
+        else:
+            for r in (await get_repos(login))["repos"]:
+                tokens = set(r["topics"]) | _words(r["name"].replace("-", " ").replace("_", " ")) | _words(r["description"])
+                if r["language"]:
+                    tokens.add(r["language"].lower())
+                    langs[r["language"]] += 1
+                repos[r["name"]] = tokens
+        return {"repos": repos, "languages": langs}
+
+    return await _cached(f"tech:{login}", load)
+
+
+def _matches(key: str, tokens: set[str]) -> bool:
+    if key.endswith("*"):
+        return any(t.startswith(key[:-1]) for t in tokens)
+    return key in tokens
+
+
+def tech_count(tech: dict, *names: str) -> int:
+    """How many repos use any of these TECH_STACK items (or other alias-less names)."""
+    keys = [k for name in names for k in config.TECH_ALIASES.get(name, [name.lower()])]
+    return sum(1 for tokens in tech["repos"].values() if any(_matches(k, tokens) for k in keys))
+
+
+def tech_repos(tech: dict, marker: str) -> int:
+    """How many repos carry a raw token, e.g. 'github-actions'."""
+    return sum(1 for tokens in tech["repos"].values() if marker in tokens)
+
+
+def untracked_languages(tech: dict, limit: int = 4) -> list[tuple[str, int]]:
+    """Languages found in repos that no TECH_STACK item covers, most used first."""
+    keys = [k for items in config.TECH_STACK.values() for name, _, _ in items
+            for k in config.TECH_ALIASES.get(name, [name.lower()]) if k != "*"]
+    skip = {"Makefile", "Procfile", "Batchfile", "Dockerfile"}
+    out = [(lang, n) for lang, n in tech["languages"].most_common()
+           if lang not in skip and not any(_matches(k, {lang.lower()}) for k in keys)]
+    return out[:limit]
 
 
 # ------------------------------------------------------------------ helpers

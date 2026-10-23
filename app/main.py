@@ -63,8 +63,10 @@ async def card_about(username: str | None = None, n: int = 2):
 
 
 @app.get("/card/tech-stack")
-async def card_tech(n: int = 3):
-    return await _render(lambda: asyncio.sleep(0, prof.tech_stack(n)))
+async def card_tech(username: str | None = None, n: int = 3):
+    async def f():
+        return prof.tech_stack(await gh.get_tech(_user(username)), n)
+    return await _render(f)
 
 
 @app.get("/card/what-i-build")
@@ -88,8 +90,10 @@ async def card_project(index: int, username: str | None = None):
 
 
 @app.get("/card/architecture")
-async def card_architecture(n: int = 6):
-    return await _render(lambda: asyncio.sleep(0, eng.architecture(n)))
+async def card_architecture(username: str | None = None, n: int = 6):
+    async def f():
+        return eng.architecture(await gh.get_tech(_user(username)), n)
+    return await _render(f)
 
 
 @app.get("/card/timeline")
@@ -132,8 +136,10 @@ async def card_backend(n: int = 14):
 
 
 @app.get("/card/cloud")
-async def card_cloud(n: int = 16):
-    return await _render(lambda: asyncio.sleep(0, eng.cloud_deploy(n)))
+async def card_cloud(username: str | None = None, n: int = 16):
+    async def f():
+        return eng.cloud_deploy(await gh.get_tech(_user(username)), n)
+    return await _render(f)
 
 
 @app.get("/card/workflow")
@@ -156,8 +162,13 @@ async def card_devos(username: str | None = None, n: int = 19):
 
 
 @app.get("/card/achievements")
-async def card_achievements(n: int = 20):
-    return await _render(lambda: asyncio.sleep(0, eng.achievements(n)))
+async def card_achievements(username: str | None = None, n: int = 20):
+    async def f():
+        login = _user(username)
+        user, repos, stats, cal = await asyncio.gather(
+            gh.get_user(login), gh.get_repos(login), gh.get_stats(login), gh.get_calendar(login))
+        return eng.achievements(user, repos, stats, cal, n)
+    return await _render(f)
 
 
 @app.get("/card/collaborate")
@@ -231,8 +242,10 @@ async def api_experience():
 
 
 @app.get("/api/tech-stack")
-async def api_tech():
-    return _json({"status": "success", "stack": {k: [n for n, _, _ in v] for k, v in config.TECH_STACK.items()}})
+async def api_tech(username: str | None = None):
+    tech = await gh.get_tech(_user(username))
+    return _json({"status": "success", "stack": {
+        k: [{"name": n, "repos": gh.tech_count(tech, n)} for n, _, _ in v] for k, v in config.TECH_STACK.items()}})
 
 
 @app.get("/health")
