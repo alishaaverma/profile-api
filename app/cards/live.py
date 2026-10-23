@@ -5,13 +5,16 @@ from __future__ import annotations
 import json
 import random
 import re
+from collections import Counter
 from datetime import datetime, timezone
 
 from .. import config
 from .. import github as gh
 from ..github import featured, lang_color, time_ago
-from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, GREEN, MUTED, ORANGE, SKIES, TEXT, celestial, compact, d,
-                    dot, esc, frame, heading, panel, phase_label, sky, sky_phase, stars, svg, synced, trunc, wrap)
+from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, MUTED,
+                    ORANGE, SKIES, TEXT, celestial, compact, d, dot, esc, festival_ground, festival_sky,
+                    festival_today, frame, heading, panel,
+                    phase_label, sky, sky_phase, stars, svg, synced, trunc, wrap)
 
 STAR = "M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
 FORK = "M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"
@@ -112,11 +115,35 @@ def project_card(repo: dict | None, idx: int, login: str) -> str:
 
 # ------------------------------------------------- timeline + open source
 
-def timeline_opensource(user: dict, stats: dict, calendar: dict, n: int = 7) -> str:
+def journey(user: dict, repos: dict, limit: int = 5) -> list[tuple[str, str, str, str]]:
+    """(year, title, line1, line2) per year, built from when each repo was created.
+    Titles come from config.TIMELINE_TITLES when set for that year."""
+    by_year: dict[str, list[dict]] = {}
+    for r in repos["repos"]:
+        if r.get("created_at"):
+            by_year.setdefault(r["created_at"][:4], []).append(r)
+    joined = (user.get("created_at") or "")[:4]
+    items = []
+    for year in sorted(set(by_year) | ({joined} if joined else set())):
+        rs = by_year.get(year, [])
+        langs = [lang for lang, _ in Counter(r["language"] for r in rs if r["language"]).most_common(2)]
+        auto = "Joined GitHub" if year == joined else (f"{langs[0]} projects" if langs else "Building")
+        title = config.TIMELINE_TITLES.get(year) or auto
+        if rs:
+            line1 = f"{len(rs)} repo{'s' if len(rs) != 1 else ''}" + (f" · {langs[0]}" if langs else "")
+            line2 = trunc(max(rs, key=lambda r: r["created_at"])["name"].replace("_", " ").replace("-", " "), 17)
+        else:
+            line1, line2 = "Started my journey", ""
+        items.append((year, title, line1, line2))
+    # keep the year I joined, then the most recent ones
+    return items if len(items) <= limit else items[:1] + items[-(limit - 1):]
+
+
+def timeline_opensource(user: dict, repos: dict, stats: dict, calendar: dict, n: int = 9) -> str:
     W, H = 850, 262
     b = frame(W, H)
-    b += heading(24, 20, n, "Experience Timeline", "My learning, building and exploring journey.")
-    items = config.TIMELINE[:5]
+    b += heading(24, 20, n, "My Journey", "Built from my repositories, year by year.")
+    items = journey(user, repos)
     x0, x1, ly = 72, 448, 120
     b += f'<rect x="{x0}" y="{ly - 1.5}" width="{x1 - x0}" height="3" rx="1.5" fill="#2a1a0c"/>'
     b += f'<rect x="{x0}" y="{ly - 1.5}" width="{x1 - x0}" height="3" rx="1.5" fill="url(#og)" class="grow" filter="url(#glow)"/>'
@@ -206,7 +233,7 @@ def analytics_exploring(user: dict, stats: dict, calendar: dict, n: int = 9) -> 
         y = 84 + i * 34
         b += (f'<g class="rise" {d(.3 + i * .12)}>' + dot(552, y - 4, 3.5, ORANGE, "") +
               f'<text x="562" y="{y}" font-size="11" fill="#c9d1d9">{esc(label)}</text>'
-              f'<text x="826" y="{y}" text-anchor="end" font-size="10.5" class="mono" fill="{AMBER}">{pct}%</text>'
+              f'<text x="826" y="{y}" text-anchor="end" font-size="10.5" class="mono ink" fill="{AMBER}">{pct}%</text>'
               f'<rect x="562" y="{y + 7}" width="264" height="6" rx="3" fill="#1d1712"/>'
               f'<rect x="562" y="{y + 7}" width="{264 * pct / 100:.0f}" height="6" rx="3" fill="url(#og)" class="grow" '
               f'filter="url(#glow)" {d(.5 + i * .15)}/></g>')
@@ -307,7 +334,7 @@ def playground(repos: dict, request_url: str, n: int = 13) -> str:
               panel(24, y, 250, 36, 8, stroke=ORANGE if active else BORDER, fill="#1a1109" if active else "url(#cardg)") +
               f'<rect x="34" y="{y + 10}" width="34" height="16" rx="4" fill="{GREEN}" fill-opacity=".18" stroke="{GREEN}"/>'
               f'<text x="51" y="{y + 21.5}" text-anchor="middle" font-size="8.5" font-weight="800" fill="{GREEN}">{m}</text>'
-              f'<text x="76" y="{y + 16}" font-size="10.5" class="mono">{esc(path)}</text>'
+              f'<text x="76" y="{y + 16}" font-size="10.5" class="mono ink">{esc(path)}</text>'
               f'<text x="76" y="{y + 29}" font-size="8.8" class="muted">{esc(desc)}</text></g>')
 
     rx = 290
@@ -400,6 +427,71 @@ def developer_os(user: dict, repos: dict, events: list[dict], n: int = 19) -> st
     return svg(W, H, b, title="Developer OS")
 
 
+# ---------------------------------------------------------- now building
+
+def now_building(data: dict | None, n: int | None = 7) -> str:
+    W, H = 850, 236
+    b = frame(W, H)
+    b += heading(24, 20, n, "Now Building", "The repository I'm working on right now, live from GitHub")
+    if not data:
+        b += f'<text x="{W / 2}" y="140" text-anchor="middle" font-size="13" class="muted">Something new is on the way…</text>'
+        return svg(W, H, b, title="Now Building")
+    repo, commits, latest = data["repo"], data["commits"], data["latest"]
+    days_since = (datetime.now(timezone.utc) - datetime.fromisoformat(repo["pushed_at"].replace("Z", "+00:00"))).days
+    status, scolor = (("ACTIVE", GREEN) if days_since <= 3 else ("IN PROGRESS", AMBER) if days_since <= 14
+                      else ("ON PAUSE", MUTED))
+
+    # left: the repo
+    lx = 24
+    b += f'<g class="rise" {d(.15)}>' + panel(lx, 66, 470, 150, 10, stroke=ORANGE, extra='stroke-opacity=".45"')
+    sw = len(status) * 6.6 + 26
+    b += (f'<rect x="{lx + 16}" y="80" width="{sw:.0f}" height="20" rx="10" fill="{scolor}" fill-opacity=".15" stroke="{scolor}"/>'
+          f'<circle cx="{lx + 27}" cy="90" r="3.5" fill="{scolor}" class="pulse"/>'
+          f'<text x="{lx + 36}" y="94" font-size="9.5" font-weight="800" fill="{scolor}">{status}</text>')
+    b += (f'<text x="{lx + 470 - 16}" y="94" text-anchor="end" font-size="10" class="dim mono">'
+          f'last push {esc(time_ago(repo["pushed_at"]))}</text>')
+    b += f'<text x="{lx + 16}" y="126" font-size="19" font-weight="800">{esc(trunc(repo["name"].replace("_", " "), 38))}</text>'
+    if repo["language"]:
+        b += (f'<circle cx="{lx + 20}" cy="141" r="4.5" fill="{repo["color"]}"/>'
+              f'<text x="{lx + 30}" y="145" font-size="10.5" class="muted">{esc(repo["language"])}</text>')
+    desc = wrap(repo["description"] or "Work in progress — follow along on GitHub.", 70, 1)
+    b += f'<text x="{lx + (110 if repo["language"] else 16)}" y="145" font-size="10.5" class="muted">{esc(desc[0])}</text></g>'
+    # terminal line with the latest commit
+    ty = 160
+    b += (f'<g class="fade" {d(.4)}><rect x="{lx + 12}" y="{ty}" width="446" height="44" rx="7" fill="#0a0e15" stroke="#1d2633"/>'
+          f'<text x="{lx + 24}" y="{ty + 17}" font-size="10" class="mono"><tspan fill="{GREEN}">$</tspan>'
+          f'<tspan fill="#c9d1d9"> git log -1 --oneline</tspan></text></g>')
+    if latest:
+        b += (f'<text x="{lx + 24}" y="{ty + 34}" font-size="10" class="mono type" {d(.9)}>'
+              f'<tspan fill="{AMBER}">{esc(latest["sha"])}</tspan>'
+              f'<tspan fill="#c9d1d9"> {esc(trunc(latest["message"], 58))}</tspan></text>')
+
+    # right: 30-day momentum
+    rx, rw = 512, 314
+    b += f'<g class="rise" {d(.3)}>' + panel(rx, 66, rw, 150, 10)
+    b += f'<text x="{rx + 16}" y="88" font-size="11.5" font-weight="700">30-day momentum</text>'
+    b += (f'<text x="{rx + rw - 16}" y="88" text-anchor="end" font-size="10" class="mono ink" fill="{AMBER}">'
+          f'{len(commits)} commit{"s" if len(commits) != 1 else ""}</text></g>')
+    today = datetime.now(timezone.utc).date()
+    per_day = Counter(c["date"][:10] for c in commits)
+    counts = [per_day.get(str(today.fromordinal(today.toordinal() - (29 - i))), 0) for i in range(30)]
+    top = max(counts) or 1
+    bx, bbase, bwid = rx + 16, 162, (rw - 32) / 30
+    for i, c in enumerate(counts):
+        h = 3 if not c else 6 + 52 * c / top
+        b += (f'<rect x="{bx + i * bwid:.1f}" y="{bbase - h:.1f}" width="{bwid - 2.5:.1f}" height="{h:.1f}" rx="1.5" '
+              f'fill="{ORANGE if c else "#1d2633"}" class="growy" style="animation-delay:{.4 + i * .03:.2f}s">'
+              f'<title>{c} commits</title></rect>')
+    active = sum(1 for c in counts if c)
+    b += (f'<text x="{rx + 16}" y="182" font-size="10" class="muted">{active} of 30 days active</text>'
+          f'<text x="{rx + rw - 16}" y="182" text-anchor="end" font-size="10" class="dim">today →</text>'
+          f'<rect x="{rx + 16}" y="192" width="{rw - 32}" height="7" rx="3.5" fill="#1d1712"/>'
+          f'<rect x="{rx + 16}" y="192" width="{(rw - 32) * active / 30:.0f}" height="7" rx="3.5" fill="url(#og)" '
+          f'class="grow" filter="url(#glow)" {d(.8)}/>')
+    b += synced(826, H - 8)
+    return svg(W, H, b, title="Now Building")
+
+
 # ---------------------------------------------------- smart contract lab
 
 SOL_KEYWORDS = {"pragma", "solidity", "contract", "public", "external", "function", "event", "indexed",
@@ -444,7 +536,7 @@ def _eth_diamond(cx, cy, s=14) -> str:
             f'<polygon points="{cx},{cy - s} {cx},{cy + s * .45:.1f} {cx + s * .62:.1f},{cy + s * .1:.1f}" fill="#fff" fill-opacity=".18"/></g>')
 
 
-def smart_contract_lab(user: dict, repos: dict, tech: dict) -> str:
+def smart_contract_lab(user: dict, repos: dict, tech: dict, n: int | None = 4) -> str:
     W, H = 850, 360
     sol = gh.tech_repo_names(tech, "Solidity")
     by_name = {r["name"]: r for r in repos["repos"]}
@@ -453,7 +545,7 @@ def smart_contract_lab(user: dict, repos: dict, tech: dict) -> str:
 
     b = frame(W, H)
     b += f'<circle cx="780" cy="40" r="70" fill="{ETH}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
-    b += heading(24, 20, None, "Smart Contract Lab", "Solidity & Web3 — where my full-stack work goes on-chain")
+    b += heading(24, 20, n, "Smart Contract Lab", "Solidity & Web3 — where my full-stack work goes on-chain")
     b += _eth_diamond(800, 40)
 
     # editor with a contract written from the live profile
@@ -547,9 +639,9 @@ def _streaks(days: list[dict]) -> tuple[int, int]:
 
 def contribution_city(user: dict, calendar: dict) -> str:
     """Last year of contributions as a 3D city: one building per day, lit for the time of day."""
-    W, H = 850, 270
-    phase = sky_phase()
-    lit = SKIES[phase][3]
+    phase, fest = sky_phase(), festival_today()
+    W, H = 850, 270 + (16 if fest in GROUND_FESTIVALS else 0)
+    lit, colors = (FESTIVALS[fest][2], FESTIVALS[fest][1]) if fest else (SKIES[phase][3], [AMBER])
     weeks = calendar["weeks"][-53:]
     days = sorted((day for week in weeks for day in week), key=lambda x: x["date"])
     peak = max(days, key=lambda x: x["count"]) if days else {"count": 0, "date": ""}
@@ -559,7 +651,12 @@ def contribution_city(user: dict, calendar: dict) -> str:
     b = frame(W, H, ember=False) + sky(1, 1, W - 2, H - 2, phase)
     if phase == "night":
         b += stars(380, 60, 450, 60, n=28, seed=4)
-    b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in ("dawn", "dusk") else 66, phase, r=15)}</g>'
+    if fest != "eid":  # Eid brings its own crescent
+        b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in ("dawn", "dusk") else 66, phase, r=15)}</g>'
+    if fest:
+        b += festival_sky(fest, 370, 66, 450, 90, seed=calendar["total"])
+        b += (f'<text x="250" y="118" text-anchor="middle" font-size="20" font-weight="800" fill="url(#og)" '
+              f'filter="url(#glow)" class="pop" {d(.5)}>{esc(FESTIVALS[fest][0])}</text>')
     b += heading(24, 20, None, "Contribution City",
                  f"Every building is one day of my last year on GitHub · {calendar['total']:,} contributions")
     chips = [(str(current), "day streak"), (str(longest), "best streak"), (str(peak["count"]), "best day")]
@@ -575,7 +672,7 @@ def contribution_city(user: dict, calendar: dict) -> str:
     # oblique projection: weeks run left to right, Sunday is the back row (up and right)
     sx, step, bw, ox = 13.2, 5, 10, 4
     x0 = (W - (len(weeks) * sx + 6 * step + bw)) / 2
-    ground = H - 40
+    ground = 230
     b += (f'<polygon points="{x0 - 6:.0f},{ground + 4} {x0 + len(weeks) * sx + 4:.0f},{ground + 4} '
           f'{x0 + len(weeks) * sx + 6 * step + 10:.0f},{ground - 6 * step - 4} {x0 + 6 * step:.0f},{ground - 6 * step - 4}" '
           f'fill="#0b111a" stroke="{BORDER}"/>')
@@ -604,7 +701,7 @@ def contribution_city(user: dict, calendar: dict) -> str:
         for wy in range(int(t + 3), int(by - 3), 5):
             for wx in (bx + 2, bx + 6):
                 if rnd.random() < lit:
-                    o += (f'<rect x="{wx:.1f}" y="{wy}" width="2" height="2" fill="{AMBER}" class="twinkle" '
+                    o += (f'<rect x="{wx:.1f}" y="{wy}" width="2" height="2" fill="{rnd.choice(colors)}" class="twinkle" '
                           f'style="animation-delay:{rnd.random() * 3:.1f}s;animation-duration:{3 + rnd.random() * 4:.1f}s"/>')
         if day["date"] == today:  # beacon on today's building
             o += f'<circle cx="{bx + bw / 2 + ox / 2:.1f}" cy="{t - ox - 3:.1f}" r="2.2" fill="#ff4d4d" class="pulse" filter="url(#glow)"/>'
@@ -618,7 +715,10 @@ def contribution_city(user: dict, calendar: dict) -> str:
         label = f'{peak["count"]} on {when}'
         b += (f'<g class="fade" {d(2)}><line x1="{px:.1f}" y1="{py - 4:.1f}" x2="{px:.1f}" y2="{py - 16:.1f}" stroke="{AMBER}" stroke-dasharray="2 2"/>'
               f'<text x="{px:.1f}" y="{py - 20:.1f}" text-anchor="middle" font-size="9.5" font-weight="700" fill="{AMBER}">{esc(label)}</text></g>')
+    if fest in GROUND_FESTIVALS:
+        b += festival_ground(fest, x0, ground + 18, len(weeks) * sx + 30, n=30)
     b += synced(24, H - 12, right=False)
+    note = FESTIVALS[fest][0] if fest else "windows light up at night"
     b += (f'<text x="826" y="{H - 12}" text-anchor="end" font-size="9.5" class="dim mono fade" {d(1.3)}>'
-          f'{esc(phase_label(phase, user.get("location", "")))} · windows light up at night</text>')
-    return svg(W, H, b, title="Contribution City")
+          f'{esc(phase_label(phase, user.get("location", "")))} · {esc(note)}</text>')
+    return svg(W, H, b, FESTIVAL_CSS, title="Contribution City")

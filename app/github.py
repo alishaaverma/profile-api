@@ -13,7 +13,7 @@ import json
 import re
 import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -152,6 +152,31 @@ async def get_repos(login: str) -> dict:
         }
 
     return await _cached(f"repos:{login}", load)
+
+
+async def get_now_building(login: str, repos: dict) -> dict | None:
+    """The most recently pushed repo and its commits from the last 30 days:
+    {'repo': {...}, 'commits': [{'sha','message','date'}], 'latest': {...} | None}"""
+
+    async def load():
+        if not repos["repos"]:
+            return None
+        repo = max(repos["repos"], key=lambda r: r["pushed_at"] or "")
+        path = f"/repos/{login}/{repo['name']}/commits"
+        since = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        def parse(raw):
+            return [{"sha": c["sha"][:7], "message": (c["commit"]["message"] or "").splitlines()[0],
+                     "date": c["commit"]["author"]["date"]} for c in raw]
+
+        try:
+            commits = parse(await _get(path, since=since, per_page=100))
+            latest = commits[0] if commits else (parse(await _get(path, per_page=1)) or [None])[0]
+        except GitHubError:  # e.g. an empty repository
+            commits, latest = [], None
+        return {"repo": repo, "commits": commits, "latest": latest}
+
+    return await _cached(f"building:{login}", load)
 
 
 def featured(repos: list[dict], count: int = 4) -> list[dict]:
@@ -444,6 +469,67 @@ def tech_count(tech: dict, *names: str) -> int:
 def tech_repos(tech: dict, marker: str) -> int:
     """How many repos carry a raw token, e.g. 'github-actions'."""
     return sum(1 for tokens in tech["repos"].values() if marker in tokens)
+
+
+# ---------------------------------------------------------------- festivals
+
+# Google's public "Holidays in India" calendar: no key needed, and it already
+# knows the dates of festivals that move every year (Diwali, Holi, Eid...).
+HOLIDAY_ICS = ("https://calendar.google.com/calendar/ical/"
+               "en.indian%23holiday%40group.v.calendar.google.com/public/basic.ics")
+
+# calendar event name -> (festival theme, days before, days after); earlier rows win a clash
+FESTIVAL_EVENTS = [
+    (re.compile(r"diwali|deepavali", re.I), "diwali", 2, 2),  # Dhanteras to Bhai Dooj
+    (re.compile(r"govardhan|bhai du", re.I), "diwali", 0, 0),
+    (re.compile(r"\bholi\b|holika", re.I), "holi", 0, 0),
+    (re.compile(r"ramzan id|bakrid|\beid\b|id-ul-fitr|id-ul-zuha", re.I), "eid", 0, 1),
+    (re.compile(r"christmas", re.I), "christmas", 0, 0),
+    (re.compile(r"dussehra|vijaya ?dashami", re.I), "dussehra", 0, 0),
+    (re.compile(r"sharad navratri", re.I), "navratri", 0, 8),  # nine nights
+    (re.compile(r"durga puja|maha saptami|maha ashtami|maha navami", re.I), "navratri", 0, 0),
+    (re.compile(r"ganesh chaturthi", re.I), "ganesh", 0, 1),
+    (re.compile(r"janmashtami", re.I), "janmashtami", 0, 0),
+    (re.compile(r"raksha bandhan", re.I), "rakhi", 0, 0),
+    (re.compile(r"\bonam\b", re.I), "onam", 0, 0),
+    (re.compile(r"guru nanak", re.I), "gurpurab", 0, 0),
+    (re.compile(r"chhat", re.I), "chhath", 0, 1),
+    (re.compile(r"makar sankranti|pongal|lohri", re.I), "sankranti", 1, 1),
+    (re.compile(r"new year's day", re.I), "newyear", 1, 0),
+    (re.compile(r"republic day", re.I), "republic", 0, 0),
+    (re.compile(r"independence day", re.I), "independence", 0, 0),
+]
+
+
+async def get_festival_dates() -> dict[str, str]:
+    """{'YYYY-MM-DD': festival theme} from the live holiday calendar; {} if it can't be read."""
+
+    async def load():
+        try:
+            # a separate client: the GitHub token must not go to Google
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                r = await client.get(HOLIDAY_ICS)
+            r.raise_for_status()
+        except httpx.HTTPError:
+            return {}
+        text = re.sub(r"\r?\n[ \t]", "", r.text)  # unfold long lines
+        best: dict[str, tuple[int, str]] = {}
+        for event in text.split("BEGIN:VEVENT")[1:]:
+            start = re.search(r"^DTSTART[^:\n]*:(\d{8})", event, re.M)
+            summary = re.search(r"^SUMMARY[^:\n]*:(.*)$", event, re.M)
+            if not start or not summary:
+                continue
+            for rank, (pattern, theme, before, after) in enumerate(FESTIVAL_EVENTS):
+                if pattern.search(summary.group(1)):
+                    day = datetime.strptime(start.group(1), "%Y%m%d")
+                    for offset in range(-before, after + 1):
+                        key = (day + timedelta(days=offset)).strftime("%Y-%m-%d")
+                        if key not in best or rank < best[key][0]:
+                            best[key] = (rank, theme)
+                    break
+        return {k: theme for k, (_, theme) in best.items()}
+
+    return await _cached("festivals", load)
 
 
 # ------------------------------------------------------------------ helpers

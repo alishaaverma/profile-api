@@ -180,13 +180,20 @@ ARCHITECTURE = {
     ],
 }
 
-TIMELINE = [
-    ("2020", "Started my journey", "Joined GitHub, Java", "& Android projects"),
-    ("2022", "Web foundations", "HTML, CSS, Bootstrap,", "JavaScript sites"),
-    ("2023", "Internships", "CodeClause &", "Bharat Intern projects"),
-    ("2025", "Full stack", "React, TypeScript,", "Python backends"),
-    ("2026", "Scaling up", "Cloud, networking,", "DevOps & automation"),
-]
+# Festival themes for the hero and Contribution City. Dates come live from Google's public
+# "Holidays in India" calendar (Diwali, Holi, Eid, Christmas, Sankranti, ...), so nothing to update
+# each year. Halloween (30-31 Oct) is a fixed date, as it isn't on that calendar.
+BIRTHDAY = "10-23"  # "MM-DD" to get balloons on your birthday, e.g. "07-21"
+
+# The journey timeline is built from your repos: one stop per year with the
+# repos you created, their main languages and the newest one. Set a title for a
+# year here to override the automatic one ("Joined GitHub" / "<language> projects").
+TIMELINE_TITLES = {
+    "2022": "Web foundations",
+    "2023": "Internships",
+    "2025": "Full stack",
+    "2026": "Scaling up",
+}
 
 EXPLORING = [
     ("Advanced Backend Systems", 80),

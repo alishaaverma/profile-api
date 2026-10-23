@@ -40,14 +40,15 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 | `/card/hero` | name, location, repos, followers |
 | `/card/about` | repos, account age |
 | `/card/project/{0-3}` | top repos: stars, forks, language, topics, last push |
-| `/card/timeline` | PRs, issues, commits per repo, yearly contributions |
+| `/card/timeline` | journey built from repo creation years (titles in `TIMELINE_TITLES`), PRs, issues, commits per repo |
 | `/card/analytics` | commits, followers, contribution heatmap |
 | `/card/activity` | latest public events + terminal |
 | `/card/playground` | live `/api/projects` response |
 | `/card/developer-os` | neofetch-style stats, GitHub API latency |
-| `/card/city` | Contribution City: the last year as a 3D city, one building per day, plus streaks |
+| `/card/city` | Contribution City: the last year as a 3D city, one building per day, plus streaks and festival themes |
 | `/card/tech-stack` | `TECH_STACK` with per-tool repo counts |
 | `/card/smart-contracts` | Smart Contract Lab: a live `Profile.sol`, Solidity repos and detected Web3 tools |
+| `/card/now-building` | most recently pushed repo, its latest commit and 30-day commit momentum |
 | `/card/architecture`, `/card/cloud` | most used tools per layer, repos with Docker / GitHub Actions / AWS |
 | `/card/achievements` | stars, commits, PRs, yearly contributions, repos, years on GitHub |
 | `/card/what-i-build`, `/card/backend`, `/card/workflow`, `/card/problem-solution`, `/card/collaborate` | content from `app/config.py` |
@@ -57,13 +58,21 @@ The FastAPI server (`app/main.py`, `index.py`) still works for local previews, o
 Every card accepts `?username=` and `?n=` (the section number).
 
 The hero, city and collaborate cards follow the time of day in India (sunrise, daytime, sunset, night):
-the sky, sun or moon and the number of lit windows change with each hourly render.
+the sky, sun or moon and the number of lit windows change with each hourly render. On Diwali, Holi,
+Eid (both), Navratri/Durga Puja, Dussehra, Ganesh Chaturthi, Janmashtami, Raksha Bandhan, Onam, Gurpurab,
+Chhath, Christmas, Halloween, Makar Sankranti, New Year, Independence Day, Republic Day and your birthday
+(`BIRTHDAY` in `app/config.py`) the hero and Contribution City also get a festival theme. The dates are
+read live from Google's public "Holidays in India" calendar on every render, so festivals that move each
+year (Diwali, Holi, Eid) need no updates. If the calendar can't be reached, the fixed-date ones still show.
+
+Every card has a light variant: when the viewer's browser or OS prefers light mode, the card switches
+to a light palette (terminals and the code editor stay dark).
 
 JSON: `/api/profile`, `/api/projects`, `/api/github/stats`, `/api/activity`, `/api/experience`, `/api/tech-stack`, `/health`.
 
 ## Customise
 
-Edit `app/config.py`. It holds the tagline, about text, tech stack, timeline, "currently exploring" percentages,
+Edit `app/config.py`. It holds the tagline, about text, tech stack, journey titles, festival dates, "currently exploring" percentages,
 workflow and pinned repos (`FEATURED_REPOS`). `TECH_ALIASES` controls how each tech-stack item is spotted in a repo
 (languages, topics, description, `package.json` / `requirements.txt` dependencies, Dockerfile, workflows). Adding
 topics to your repos on GitHub makes the counts more accurate.

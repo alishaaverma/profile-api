@@ -6,9 +6,10 @@ from datetime import datetime, timezone
 
 from .. import config
 from .. import github as gh
-from .theme import (AMBER, BLUE, BORDER, CARD2, ETH, GREEN, MUTED, ORANGE, SKIES, TEXT, bullet_list, celestial,
-                    compact, count_badge, cube, d, dot, esc, frame, heading, ist_now, panel, phase_label, sky,
-                    sky_phase, skyline, stars, svg, synced, wrap)
+from .theme import (AMBER, BLUE, BORDER, CARD2, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, MUTED, ORANGE,
+                    SKIES, TEXT, bullet_list, celestial, compact, count_badge, cube, d, dot, esc, festival_ground,
+                    festival_sky, festival_today, frame, heading, ist_now, panel, phase_label, sky, sky_phase, skyline, stars, svg,
+                    synced, wrap)
 
 P = config.PROFILE
 
@@ -24,14 +25,20 @@ def _years(user: dict) -> int:
 
 def hero(user: dict) -> str:
     W, H = 850, 330
-    phase = sky_phase()
+    phase, fest = sky_phase(), festival_today()
     b = frame(W, H) + sky(1, 1, W - 2, H - 2, phase)
-    # sky for the current time in India + skyline behind the right column
+    # sky for the current time (and festival) in India + skyline behind the right column
     b += f'<circle cx="690" cy="300" r="140" fill="{SKIES[phase][1]}" fill-opacity=".10" filter="url(#softglow)" class="glowpulse"/>'
     if phase == "night":
         b += stars(412, 10, 130, 200, n=22, seed=11)
-    b += f'<g class="fade" {d(.4)}>{celestial(482, 150 if phase in ("dawn", "dusk") else 64, phase)}</g>'
-    b += skyline(380, H - 1, 468, seed=11, opacity=.55, max_h=110, lit=SKIES[phase][3])
+    if fest != "eid":  # Eid brings its own crescent
+        b += f'<g class="fade" {d(.4)}>{celestial(482, 150 if phase in ("dawn", "dusk") else 64, phase)}</g>'
+    if fest:
+        b += festival_sky(fest, 395, 12, 145, 195, seed=11)
+    lit, colors = (FESTIVALS[fest][2], FESTIVALS[fest][1]) if fest else (SKIES[phase][3], None)
+    b += skyline(380, H - 1, 468, seed=11, opacity=.55, max_h=110, lit=lit, colors=colors)
+    if fest in GROUND_FESTIVALS:
+        b += festival_ground(fest, 560, H - 14, 280, n=14)
     b += f'<rect x="1" y="{H - 60}" width="{W - 2}" height="59" rx="14" fill="url(#emberg)"/>'
 
     first, _, rest = user["name"].partition(" ")
@@ -67,7 +74,8 @@ def hero(user: dict) -> str:
         x += len(m) * 6.3 + 34
     b += synced(34, 306, right=False)
     b += (f'<text x="{34 + len(f"live · {ist_now()}") * 5.75 + 22:.0f}" y="306" font-size="9.5" class="dim mono fade" {d(1.3)}>'
-          f'· {esc(phase_label(phase, user.get("location", "")))}</text>')
+          f'· {esc(phase_label(phase, user.get("location", "")))}'
+          + (f'<tspan fill="{AMBER}" font-weight="700"> · {esc(FESTIVALS[fest][0])}</tspan>' if fest else "") + '</text>')
 
     # terminal
     tx, ty, tw, th = 548, 24, 276, 152
@@ -102,9 +110,10 @@ def hero(user: dict) -> str:
 
     stats = (f"{user['public_repos']} repos  ·  {compact(user['followers'])} followers  ·  "
              f"{compact(user['following'])} following")
-    b += f'<text x="{nx + nw / 2}" y="256" text-anchor="middle" font-size="11" class="mono fade" fill="#c9d1d9" {d(1.3)}>{esc(stats)}</text>'
+    b += f'<text x="{nx + nw / 2}" y="256" text-anchor="middle" font-size="11" class="mono ink fade" fill="#c9d1d9" {d(1.3)}>{esc(stats)}</text>'
 
-    css = "@keyframes neon{0%,100%{opacity:.3}8%,22%{opacity:1}34%{opacity:.3}}.neon{opacity:.3;animation:neon 4.5s ease-in-out infinite}"
+    css = ("@keyframes neon{0%,100%{opacity:.3}8%,22%{opacity:1}34%{opacity:.3}}.neon{opacity:.3;animation:neon 4.5s ease-in-out infinite}"
+           + FESTIVAL_CSS)
     return svg(W, H, b, css, title=f"{user['name']} - {P['role']}")
 
 

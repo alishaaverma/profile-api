@@ -14,7 +14,7 @@ from . import github as gh
 from .cards import engineering as eng
 from .cards import live
 from .cards import profile as prof
-from .cards.theme import ORANGE, esc, frame, svg
+from .cards.theme import ORANGE, esc, frame, set_festival_dates, svg
 
 app = FastAPI(title="GitHub Profile API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
@@ -51,7 +51,9 @@ async def _render(fn):
 @app.get("/card/hero")
 async def card_hero(username: str | None = None):
     async def f():
-        return prof.hero(await gh.get_user(_user(username)))
+        user, festivals = await asyncio.gather(gh.get_user(_user(username)), gh.get_festival_dates())
+        set_festival_dates(festivals)
+        return prof.hero(user)
     return await _render(f)
 
 
@@ -66,8 +68,17 @@ async def card_about(username: str | None = None, n: int = 2):
 async def card_city(username: str | None = None):
     async def f():
         login = _user(username)
-        user, cal = await asyncio.gather(gh.get_user(login), gh.get_calendar(login))
+        user, cal, festivals = await asyncio.gather(gh.get_user(login), gh.get_calendar(login), gh.get_festival_dates())
+        set_festival_dates(festivals)
         return live.contribution_city(user, cal)
+    return await _render(f)
+
+
+@app.get("/card/now-building")
+async def card_now_building(username: str | None = None, n: int = 7):
+    async def f():
+        login = _user(username)
+        return live.now_building(await gh.get_now_building(login, await gh.get_repos(login)), n)
     return await _render(f)
 
 
@@ -118,8 +129,9 @@ async def card_architecture(username: str | None = None, n: int = 6):
 async def card_timeline(username: str | None = None, n: int = 7):
     async def f():
         login = _user(username)
-        user, stats, cal = await asyncio.gather(gh.get_user(login), gh.get_stats(login), gh.get_calendar(login))
-        return live.timeline_opensource(user, stats, cal, n)
+        user, repos, stats, cal = await asyncio.gather(
+            gh.get_user(login), gh.get_repos(login), gh.get_stats(login), gh.get_calendar(login))
+        return live.timeline_opensource(user, repos, stats, cal, n)
     return await _render(f)
 
 
@@ -254,9 +266,11 @@ async def api_activity(username: str | None = None):
 
 
 @app.get("/api/experience")
-async def api_experience():
+async def api_experience(username: str | None = None):
+    login = _user(username)
+    user, repos = await asyncio.gather(gh.get_user(login), gh.get_repos(login))
     return _json({"status": "success", "timeline": [
-        {"year": y, "title": t, "details": f"{a} {b}"} for y, t, a, b in config.TIMELINE]})
+        {"year": y, "title": t, "details": f"{a} {b}".strip()} for y, t, a, b in live.journey(user, repos, limit=99)]})
 
 
 @app.get("/api/tech-stack")
@@ -274,8 +288,8 @@ async def health():
 # ------------------------------------------------------------- preview
 
 PREVIEW_CARDS = ["hero", "city", "about", "tech-stack", "smart-contracts", "what-i-build", "project/0", "project/1", "project/2", "project/3",
-                 "architecture", "timeline", "analytics", "activity", "playground", "backend", "cloud", "workflow",
-                 "problem-solution", "developer-os", "achievements", "collaborate"]
+                 "now-building", "architecture", "timeline", "analytics", "activity", "playground", "cloud",
+                 "achievements", "collaborate"]
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -22,6 +22,7 @@ from app import github as gh
 from app.cards import engineering as eng
 from app.cards import live
 from app.cards import profile as prof
+from app.cards.theme import set_festival_dates
 
 BUTTONS = {
     "button-view-my-work": ("View My Work", "github", True),
@@ -33,34 +34,34 @@ BUTTONS = {
 
 
 async def render(login: str) -> tuple[dict[str, str], list[dict]]:
-    user, repos, events, stats, cal, tech = await asyncio.gather(
+    user, repos, events, stats, cal, tech, festivals = await asyncio.gather(
         gh.get_user(login), gh.get_repos(login), gh.get_events(login), gh.get_stats(login), gh.get_calendar(login),
-        gh.get_tech(login))
+        gh.get_tech(login), gh.get_festival_dates())
+    set_festival_dates(festivals)
     top = gh.featured(repos["repos"], 4)
+    building = await gh.get_now_building(login, repos)
 
+    # Section numbers follow the order of the cards in the profile README.
     cards = {
         "hero": prof.hero(user),
         "city": live.contribution_city(user, cal),
-        "about": prof.about(user),
-        "tech-stack": prof.tech_stack(tech),
-        "smart-contracts": live.smart_contract_lab(user, repos, tech),
-        "what-i-build": prof.what_i_build(),
+        "about": prof.about(user, 2),
+        "tech-stack": prof.tech_stack(tech, 3),
+        "smart-contracts": live.smart_contract_lab(user, repos, tech, 4),
+        "what-i-build": prof.what_i_build(5),
         "featured-projects": prof.section_heading("Featured Projects",
                                                    {"newest": "My latest public repositories, live from GitHub",
                                                     "updated": "My most recently updated repositories, live from GitHub"}
-                                                   .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 5),
-        "architecture": eng.architecture(tech),
-        "timeline": live.timeline_opensource(user, stats, cal),
-        "analytics": live.analytics_exploring(user, stats, cal),
-        "activity": live.activity_terminal(user, repos, events),
-        "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos"),
-        "backend": eng.backend_database(),
-        "cloud": eng.cloud_deploy(tech),
-        "workflow": eng.workflow(),
-        "problem-solution": eng.problem_solution(),
-        "developer-os": live.developer_os(user, repos, events),
-        "achievements": eng.achievements(user, repos, stats, cal),
-        "collaborate": prof.collaborate(user),
+                                                   .get(config.FEATURED_SORT, "Live from my GitHub repositories"), 6),
+        "now-building": live.now_building(building, 7),
+        "architecture": eng.architecture(tech, 8),
+        "timeline": live.timeline_opensource(user, repos, stats, cal, 9),
+        "analytics": live.analytics_exploring(user, stats, cal, 11),
+        "activity": live.activity_terminal(user, repos, events, 13),
+        "playground": live.playground(repos, f"https://api.github.com/users/{login}/repos", 15),
+        "cloud": eng.cloud_deploy(tech, 16),
+        "achievements": eng.achievements(user, repos, stats, cal, 17),
+        "collaborate": prof.collaborate(user, 18),
     }
     for i in range(4):
         cards[f"project-{i}"] = live.project_card(top[i] if i < len(top) else None, i, login)
