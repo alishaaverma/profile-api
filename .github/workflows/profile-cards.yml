@@ -3,11 +3,11 @@ name: Profile cards
 # Renders the animated SVG cards from live GitHub data and publishes them to the
 # `output` branch of the profile repo, where README.md loads them from.
 on:
-  # Every run queues the next one an hour on (the `next` job below). GitHub's cron drops most
+  # Every run queues the next one 30 minutes on (the `next` job below). GitHub's cron drops most
   # scheduled runs here, so it is only the backup that restarts the chain if it ever breaks
-  # (hh:01 IST; cron is UTC, IST = UTC+5:30). Actions minutes are free in a public repo.
+  # (hh:01 and hh:31 IST; cron is UTC, IST = UTC+5:30). Actions minutes are free in a public repo.
   schedule:
-    - cron: "31 * * * *"
+    - cron: "1,31 * * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -68,12 +68,12 @@ jobs:
           git commit -q -am "Update profile links"
           git push -q
 
-  # Queue the next render an hour from now, even if this one failed.
+  # Queue the next render 30 minutes from now, even if this one failed.
   next:
     needs: render
     if: always()
     runs-on: ubuntu-latest
-    # Settings → Environments → refresh-wait → Wait timer: 60 minutes. A job waiting on the timer
+    # Settings → Environments → refresh-wait → Wait timer: 30 minutes. A job waiting on the timer
     # holds no runner; without the timer the sleep below does the waiting instead.
     environment: refresh-wait
     permissions:
@@ -84,7 +84,7 @@ jobs:
           GH_TOKEN: ${{ github.token }} # a workflow_dispatch from GITHUB_TOKEN does start a run
         run: |
           started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
-          wait=$(( $(date -d "$started" +%s) + 59 * 60 - $(date +%s) ))
+          wait=$(( $(date -d "$started" +%s) + 29 * 60 - $(date +%s) ))
           if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
           newer=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/profile-cards.yml/runs?per_page=20" \
                   --jq "[.workflow_runs[] | select(.id > $GITHUB_RUN_ID and .status != \"completed\")] | length")
