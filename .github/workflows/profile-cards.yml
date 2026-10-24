@@ -3,9 +3,9 @@ name: Profile cards
 # Renders the animated SVG cards from live GitHub data and publishes them to the
 # `output` branch of the profile repo, where README.md loads them from.
 on:
-  # Every 15 minutes (hh:01, :16, :31, :46 IST; cron is UTC, IST = UTC+5:30). GitHub often starts
-  # scheduled runs late or skips them, so this keeps the cards within the hour; Actions minutes
-  # are free in a public repo.
+  # Every run queues the next one 15 minutes on (the `next` job below). GitHub's cron drops most
+  # scheduled runs here, so it is only the backup that restarts the chain if it ever breaks
+  # (hh:01, :16, :31, :46 IST; cron is UTC, IST = UTC+5:30). Actions minutes are free in a public repo.
   schedule:
     - cron: "1,16,31,46 * * * *"
   workflow_dispatch:
@@ -15,16 +15,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: profile-cards
-  cancel-in-progress: false # a dispatch that arrives mid-render waits instead of killing it
-
 env:
   PROFILE_REPO: alishaaverma/alishaaverma
 
 jobs:
   render:
     runs-on: ubuntu-latest
+    concurrency:
+      group: profile-cards
+      cancel-in-progress: false # a dispatch that arrives mid-render waits instead of killing it
     steps:
       - uses: actions/checkout@v4
 
@@ -68,3 +67,28 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -q -am "Update profile links"
           git push -q
+
+  # Queue the next render 15 minutes from now, even if this one failed.
+  next:
+    needs: render
+    if: always()
+    runs-on: ubuntu-latest
+    # Settings → Environments → refresh-wait → Wait timer: 15 minutes. A job waiting on the timer
+    # holds no runner; without the timer the sleep below does the waiting instead.
+    environment: refresh-wait
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the next render unless a newer run will
+        env:
+          GH_TOKEN: ${{ github.token }} # a workflow_dispatch from GITHUB_TOKEN does start a run
+        run: |
+          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          wait=$(( $(date -d "$started" +%s) + 14 * 60 - $(date +%s) ))
+          if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
+          newer=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/profile-cards.yml/runs?per_page=20" \
+                  --jq "[.workflow_runs[] | select(.id > $GITHUB_RUN_ID and .status != \"completed\")] | length")
+          if [ "$newer" != "0" ]; then
+            echo "A newer run is queued or running; it will dispatch the next render"; exit 0
+          fi
+          gh workflow run profile-cards.yml -R "$GITHUB_REPOSITORY" --ref main
