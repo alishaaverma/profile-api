@@ -3,10 +3,11 @@ name: Profile cards
 # Renders the animated SVG cards from live GitHub data and publishes them to the
 # `output` branch of the profile repo, where README.md loads them from.
 on:
-  # Every hour at hh:01 IST (cron is UTC; IST = UTC+5:30), so the greeting and sky follow the day.
-  # GitHub may start a scheduled run late or skip one.
+  # Every 15 minutes (hh:01, :16, :31, :46 IST; cron is UTC, IST = UTC+5:30). GitHub often starts
+  # scheduled runs late or skips them, so this keeps the cards within the hour; Actions minutes
+  # are free in a public repo.
   schedule:
-    - cron: "31 * * * *"
+    - cron: "1,16,31,46 * * * *"
   workflow_dispatch:
   push:
     branches: [main]
