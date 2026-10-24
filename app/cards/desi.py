@@ -702,9 +702,9 @@ def dainik_commit(user: dict, calendar: dict, commits: list[dict], events: list[
     elif today >= 10:
         head = f"{first} ka dhamaka: aaj {today} contributions!"
     elif today and latest:
-        head = f"{latest['repo']} pe kaam zor-shor se jaari, aaj {today} contributions"
+        head = f"{latest['repo']} pe kaam zor-shor se jaari, aaj {today} contribution{'s' if today > 1 else ''}"
     elif yday:
-        head = f"Kal {yday} contributions ke baad aaj abhi tak shanti"
+        head = f"Kal {yday} contribution{'s' if yday > 1 else ''} ke baad aaj abhi tak shanti"
     else:
         head = "Coding mein chhutti! Sootron ke mutabik chai break lamba chala"
     sub = f"Is hafte {week} contributions · saal bhar mein {calendar['total']} · {len(rs)} repos"
