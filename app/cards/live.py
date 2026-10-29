@@ -16,7 +16,7 @@ from ..github import featured, lang_color, time_ago
 from .theme import (AMBER, BLUE, BORDER, CARD2, CYAN, ETH, FESTIVAL_CSS, FESTIVALS, GREEN, GROUND_FESTIVALS, LOW_SUN,
                     MUTED, ORANGE, SKIES, SUN, TEXT, WEATHER_CSS, aqi_color, celestial, compact, d, dot, esc,
                     festival_ground, festival_sky, festival_today, frame, heading, panel, weather_sky,
-                    moon_emoji, phase_label, sky, sky_phase, stars, svg, synced, tithi, trunc, wrap)
+                    moon_emoji, phase_label, sky, sky_phase, stars, sun_through, svg, synced, tithi, trunc, wrap)
 
 STAR = "M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
 FORK = "M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"
@@ -954,12 +954,12 @@ def _constellations(repos: dict | None, x, y, w, h) -> str:
 
 
 def _traffic(n: int, x0: float, x1: float, road_y: float, night: bool) -> str:
-    """One car per contribution today, driving along the front street."""
+    """One car per contribution this week (up to 15), driving along the front street."""
     import random as _r
 
     rnd = _r.Random(n)
     out = ""
-    for i in range(min(n, 10)):
+    for i in range(min(n, 15)):
         cx = x0 + rnd.random() * (x1 - x0 - 120)
         color = rnd.choice(["#e5383b", "#ffd76a", "#58a6ff", "#3fb950", "#f2f5f9", "#bc8cff"])
         lights = (f'<path d="M{cx + 12},{road_y - 3}l14,-3v6z" fill="#fff3c4" fill-opacity=".35"/>' if night else "")
@@ -1059,7 +1059,8 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
         b += stars(60, 66, 380, 50, n=14, seed=4)
         b += _constellations(repos, 520, 70, 260, 44)
     if fest != "eid":  # Eid brings its own crescent
-        b += f'<g class="fade" {d(.3)}>{celestial(470, 96 if phase in LOW_SUN else 66, phase, r=15)}</g>'
+        b += (f'<g opacity="{sun_through(weather):.2f}"><g class="fade" {d(.3)}>'
+              f'{celestial(470, 96 if phase in LOW_SUN else 66, phase, r=15)}</g></g>')
     b += weather_sky(weather, 1, 1, W - 2, 232, seed=calendar["total"])
     if fest:
         b += festival_sky(fest, 370, 66, 450, 90, seed=calendar["total"])
@@ -1156,8 +1157,8 @@ def contribution_city(user: dict, calendar: dict, weather: dict | None = None, f
             b += (f'<g class="fly" style="animation-duration:{38 + i * 9}s;animation-delay:{-i * 13}s">'
                   f'<path d="M{bx_ - 9},{by_ - 3}h18l-4,5h-10z" fill="#f2f5f9" stroke="#9aa6b8" stroke-width=".6"/>'
                   f'<path d="M{bx_ - 4},{by_ - 3}l4,-8 4,8z" fill="#ffffff" stroke="#9aa6b8" stroke-width=".6"/></g>')
-    if days and not monsoon:  # today's traffic: one car per contribution
-        b += _traffic(days[-1]["count"], x0 + 120, x0 + len(weeks) * sx, ground + 3, phase == "night")
+    if weeks and not monsoon:  # this week's traffic: one car per contribution
+        b += _traffic(sum(day["count"] for day in weeks[-1]), x0 + 120, x0 + len(weeks) * sx, ground + 3, phase == "night")
 
     # the coding pet, on the empty lots at the front left
     idle = 0

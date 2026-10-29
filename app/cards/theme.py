@@ -510,6 +510,16 @@ def aqi_color(aqi: int | None) -> str:
     return next((c for limit, c in AQI_COLORS if aqi is not None and aqi <= limit), MUTED)
 
 
+def sun_through(weather: dict | None) -> float:
+    """How much of the sun (or moon) shows through the weather: 1 in a clear sky, faint when overcast."""
+    if not weather:
+        return 1
+    if weather["kind"] in ("rain", "storm", "snow", "fog"):
+        return .2
+    cover = weather.get("clouds")
+    return 1 if cover is None else max(.25, 1 - cover / 100 * .75)
+
+
 def weather_sky(weather: dict | None, x, y, w, h, seed: int = 3) -> str:
     """Live weather drawn over a sky box: clouds, rain, storm, snow, fog or smog."""
     import random
@@ -517,14 +527,19 @@ def weather_sky(weather: dict | None, x, y, w, h, seed: int = 3) -> str:
     if not weather:
         return ""
     rnd = random.Random(seed)
-    kind, aqi = weather["kind"], weather.get("aqi") or 0
+    kind, aqi, cover = weather["kind"], weather.get("aqi") or 0, weather.get("clouds")
     out = ""
-    if kind in ("clouds", "rain", "storm", "smog", "fog"):
+    if kind in ("clear", "clouds", "rain", "storm", "smog", "fog"):
         shade = "#5b6577" if kind in ("rain", "storm") else "#9aa6b8"
-        for i in range(5 if kind == "clouds" else 7):
+        # as many clouds, and as thick, as the real cloud cover; storms always get a full sky
+        if cover is None or kind in ("rain", "storm"):
+            n, op = (0 if kind == "clear" else 5 if kind == "clouds" else 7), (.28 if kind == "clouds" else .4)
+        else:
+            n, op = round(cover / 100 * 10), .18 + cover / 100 * .3
+        for i in range(n):
             cx, cy, s = x + rnd.random() * w, y + h * (.27 + rnd.random() * .22), .7 + rnd.random() * .7
             out += (f'<g class="fly" style="animation-duration:{60 + rnd.random() * 40:.0f}s;animation-delay:{-rnd.random() * 60:.0f}s" '
-                    f'fill="{shade}" fill-opacity="{.28 if kind == "clouds" else .4}">'
+                    f'fill="{shade}" fill-opacity="{op:.2f}">'
                     f'<ellipse cx="{cx:.0f}" cy="{cy:.0f}" rx="{26 * s:.0f}" ry="{9 * s:.0f}"/>'
                     f'<ellipse cx="{cx - 10 * s:.0f}" cy="{cy - 6 * s:.0f}" rx="{13 * s:.0f}" ry="{9 * s:.0f}"/>'
                     f'<ellipse cx="{cx + 8 * s:.0f}" cy="{cy - 9 * s:.0f}" rx="{15 * s:.0f}" ry="{11 * s:.0f}"/></g>')

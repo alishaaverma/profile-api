@@ -675,14 +675,16 @@ WEATHER_CODES = [
     (tuple(range(61, 68)), "rain", "rain"), (tuple(range(71, 78)), "snow", "snow"),
     ((80, 81, 82), "rain", "showers"), ((85, 86), "snow", "snow showers"), ((95, 96, 99), "storm", "thunderstorm"),
 ]
+# cloud cover % -> words, for the dry codes 0-3 (the code alone says "partly cloudy" even at 80%)
+CLOUD_WORDS = [(15, "clear sky"), (40, "mostly clear"), (65, "partly cloudy"), (88, "mostly cloudy"), (100, "overcast")]
 AQI_LEVELS = [(50, "good"), (100, "moderate"), (150, "unhealthy for some"), (200, "unhealthy"),
               (300, "very unhealthy"), (10_000, "hazardous")]
 
 
 async def get_weather() -> dict | None:
     """Current weather and air quality at config.WEATHER_LAT/LON from Open-Meteo (free, no key):
-    {'temp', 'kind', 'words', 'aqi', 'aqi_label', 'sunrise', 'sunset'} (times as "HH:MM" IST);
-    None if it can't be read."""
+    {'temp', 'kind', 'words', 'clouds', 'aqi', 'aqi_label', 'sunrise', 'sunset'} (clouds as cover %,
+    times as "HH:MM" IST); None if it can't be read."""
 
     async def load():
         where = {"latitude": config.WEATHER_LAT, "longitude": config.WEATHER_LON, "timezone": "Asia/Kolkata"}
@@ -690,7 +692,7 @@ async def get_weather() -> dict | None:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 wx, air = await asyncio.gather(
                     client.get("https://api.open-meteo.com/v1/forecast",
-                               params={**where, "current": "temperature_2m,weather_code,precipitation",
+                               params={**where, "current": "temperature_2m,weather_code,precipitation,cloud_cover",
                                        "daily": "sunrise,sunset", "forecast_days": 1}),
                     client.get("https://air-quality-api.open-meteo.com/v1/air-quality",
                                params={**where, "current": "us_aqi"}))
@@ -702,13 +704,17 @@ async def get_weather() -> dict | None:
         # the model reports a trace of "drizzle" under thin cloud; only draw rain when real rain falls
         if kind == "rain" and (now.get("precipitation") or 0) < 0.5:
             kind, words = "clouds", "cloudy"
+        cover = now.get("cloud_cover")
+        if kind in ("clear", "clouds") and cover is not None:
+            words = next(w for limit, w in CLOUD_WORDS if cover <= limit)
+            kind = "clear" if cover <= 40 else "clouds"
         aqi = aq.get("us_aqi")
         label = next(name for limit, name in AQI_LEVELS if aqi is None or aqi <= limit) if aqi is not None else ""
         if kind in ("clear", "clouds") and aqi and aqi > 150:
-            kind, words = "smog", "smoggy"
+            kind, words = "smog", f"smoggy, {words}"
         sun = {k: (daily.get(k) or [""])[0][11:16] for k in ("sunrise", "sunset")}
-        return {"temp": round(now.get("temperature_2m", 0)), "kind": kind, "words": words, "aqi": aqi, "aqi_label": label,
-                **sun}
+        return {"temp": round(now.get("temperature_2m", 0)), "kind": kind, "words": words, "clouds": cover, "aqi": aqi,
+                "aqi_label": label, **sun}
 
     return await _cached("weather", load)
 
